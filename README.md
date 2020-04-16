@@ -9,7 +9,7 @@ This code is for ICLR2020 paper: [Learning from Explanations with Neural Executi
 - [Run](#Run)
     - [Usage](#Usage)
     - [Running process](#Runningprocess)
-- [Code Review](#CodeReview)
+- [Code Overview](#CodeOverview)
     - [CCG folder](#CCGfolder)
     - [Root foler & models folder](#Root)
     - [OtherExplanations](#OtherExplanations)
@@ -29,11 +29,15 @@ The overall framework is as follows:
 ![framework](./framework.png)
 
 <h2 id="Requirments">Requirments</h2>
-tensorflow-gpu == 1.10 
+tensorflow-gpu == 1.10 with CUDA 9.0
+
+(or tensorflow-gpu==1.14 with CUDA10.0)
 
 nltk == 3.4.4
 
 stanfordcorenlp
+
+**NOTE: tf 1.14 and 1.10 could not run on CUDA10.1 and errors will occur under such situation.**
 
 <h2 id="Run">Run</h2>
 <h3 id="Usage">Usage</h3>
@@ -54,8 +58,9 @@ The overall training process is as follows:
 
 In ```tacred.py```, we will first use ```Parser.py``` to do semantic parsing, then use ```sl.py``` to train & eval model. 
 
-<h2 id="CodeReview">Code Review</h2>
+<h2 id="CodeReview">Code Overview</h2>
 <h3 id="CCGfolder">CCG folder</h3>
+
 This folder is for semantic parsing.
 
 ```Parser.py``` will read explanations and parse the explanations into many logic forms, then use beam search, feature training to find the correct one and dump them. 
@@ -84,9 +89,9 @@ Please cite our paper if the paper and code helps you:
 
 ```
 @inproceedings{
-qin2020learning,
-title={Learning from Explanations with Neural Module Execution Tree},
-author={Yujia Qin and Ziqi Wang and Wenxuan Zhou and Jun Yan and Qinyuan Ye and Xiang Ren and Leonardo Neves and Zhiyuan Liu},
+Wang*2020Learning,
+title={Learning from Explanations with Neural Execution Tree},
+author={Ziqi Wang* and Yujia Qin* and Wenxuan Zhou and Jun Yan and Qinyuan Ye and Leonardo Neves and Zhiyuan Liu and Xiang Ren},
 booktitle={International Conference on Learning Representations},
 year={2020},
 url={https://openreview.net/forum?id=rJlUt0EYwS}
