@@ -4,10 +4,6 @@ import constant
 
 from main import read
 from sl import pseudo_labeling
-from CCG.get_data_for_classifier import transform
-import json
-import CCG.Parser as Parser
-from main import log
 
 flags = tf.flags
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -18,7 +14,7 @@ dev_file = os.path.join("./data", "tacred", "dev.pkl")
 test_file = os.path.join("./data", "tacred", "test.pkl")
 glove_word_file = os.path.join("./data", "glove", "glove.840B.300d.txt")
 emb_dict = os.path.join("./data", "tacred", "emb_dict.json")
-pattern_file = os.path.join("./", "CCG", "explanations.json")
+pattern_file = os.path.join("./data", "tacred", "explanations.json")
 
 target_dir = "data"
 log_dir = "log/event"
@@ -52,7 +48,7 @@ flags.DEFINE_integer("length", 110, "Limit length for sentence")
 flags.DEFINE_integer("num_class", len(constant.LABEL_TO_ID), "Number of classes")
 flags.DEFINE_string("tag", "", "The tag name of event files")
 
-flags.DEFINE_integer("batch_size", 1, "Batch size")
+flags.DEFINE_integer("batch_size", 50, "Batch size")
 flags.DEFINE_integer("pseudo_size", 100, "Batch size for pseudo labeling")
 flags.DEFINE_integer('pretrain_size_together',100,"Batch size for pretraining module")
 flags.DEFINE_integer("num_epoch", 50, "Number of epochs")
@@ -87,25 +83,12 @@ flags.DEFINE_float('pretrain_alpha',0.5,'simloss rate')
 def main(_):
     config = flags.FLAGS
     os.environ["CUDA_VISIBLE_DEVICES"] = config.gpu
-    data = read(config)
+
+    with tf.Graph().as_default():
+        data = read(config)
+        pseudo_labeling(config, data)
 
 
-    paser_train = Parser.FromExp2LF(True)                                         #parsing
-    paser_train.Train()
-    transform()
-
-
-    unlabeled_data,sess,model,pretrain_data,rels = pseudo_labeling(config, data) #train
-
-    samples = []
-
-    for i in range(2000):                                                        #predict
-        predcitlist = log(config,[unlabeled_data[i]],pretrain_data,data[0], model, sess,rels)
-        sample = {"sent":unlabeled_data[i]['phrase'].sentence,"help":predcitlist}
-        samples.append(sample)
-    sess.close()
-    with open("170.json",'w') as f:
-        json.dump(samples,f)
 
 if __name__ == "__main__":
     tf.app.run()

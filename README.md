@@ -41,7 +41,6 @@ stanfordcorenlp
 
 <h2 id="Run">Run</h2>
 <h3 id="Usage">Usage</h3>
-Before we start, please add a PYTHONPATH to this directory.
 
 * put TACRED (```train.json, dev.json and test.json```) into ```./data/tacred```. Due to LICENSE limit, we can't distribute dataset, you can download it here: https://catalog.ldc.upenn.edu/LDC2018T24.
 
@@ -49,16 +48,26 @@ Before we start, please add a PYTHONPATH to this directory.
 
 * download stanford-corenlp-full-2018-10-05(https://stanfordnlp.github.io/CoreNLP/history.html)，put it in ```./```.
 
-* run```./data/tacred/data_process.py```  and  ```./data/tacred/generate_pre.py``` .
+* ``cd CCG
+python parser.py
+python get_data_for_classifier.py
+mv TK* ../data/tacred
+mv explanations.json ../data/tacred
+mv exp2pat.json ../``
 
-* Run ```tacred.py``` to train and evaluate.
+* ``cd ../data/tacred
+    python generate_pre.py
+    EXPORT PYTHONPATH=$PYTHONPATH:\<project_dir\>/NExT/
+    python data_process.py
+    cd ../../
+    python tacred.py --gpu <gpu_id>``
 
 <h3 id="Runningprocess">Running process</h3>
 The overall training process is as follows:
 
-In ```tacred.py```, we will first use ```Parser.py``` to do semantic parsing, then use ```sl.py``` to train & eval model. 
+we will first use ```Parser.py``` to do semantic parsing, then use ```sl.py``` to train & eval model. 
 
-<h2 id="CodeReview">Code Overview</h2>
+<h2 id="CodeOverview">Code Overview</h2>
 <h3 id="CCGfolder">CCG folder</h3>
 
 This folder is for semantic parsing.

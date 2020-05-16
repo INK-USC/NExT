@@ -1,16 +1,17 @@
 import numpy as np
 import json
-
-from CCG.constant import *
-from CCG.utils import *
-
+try:
+    from CCG.constant import *
+    from CCG.utils import *
+except:
+    from constant import *
+    from utils import *
 from stanfordcorenlp import StanfordCoreNLP
 import os
 import pickle
 import torch.nn as nn
 import torch
 import copy
-import os
 
 class Parser():                                                       #now batch is 1
     def __init__(self,beam):
@@ -117,6 +118,7 @@ class Parser():                                                       #now batch
                 self.recursess = [[recurse(parsed_sem) for parsed_sem in parsed_sems] for parsed_sems in tqdm(self.parsed_semss)]
 
             self.test_on_train(beam)
+            self.dump_exp(beam)
             grad = 0
             for index in range(len(self.ys)):
                 self.load_one(index)
@@ -125,7 +127,6 @@ class Parser():                                                       #now batch
 
             self.theta = self.theta + lr / (1 + decay_rate * global_steps) * grad
             global_steps += 1
-        self.dump_exp(beam)
 
 
 
@@ -156,7 +157,6 @@ class Parser():                                                       #now batch
                     continue
             else:
                 continue
-        print(len(self.ys))
         print('Acc',str(Found/all))
 
     def dump_exp(self,beam=False):
@@ -189,14 +189,8 @@ class Parser():                                                       #now batch
                     continue
             else:
                 continue
-        if(os.path.exists('./CCG/exp_dump_raw.pkl')):
-            with open('./CCG/exp_dump_raw.pkl','rb') as f:
-                old_dump_L_list = pickle.load(f)
-            with open('./CCG/exp_dump_raw.pkl','wb') as f:
-                pickle.dump(old_dump_L_list+dump_L_list,f)
-        else:
-            with open('./CCG/exp_dump_raw.pkl','wb') as f:
-                pickle.dump(dump_L_list,f)
+        with open('exp_dump_raw.pkl','wb') as f:
+            pickle.dump(dump_L_list,f)
 
 
 
@@ -269,33 +263,21 @@ class FromExp2LF():
         self.parser = Parser(beam)
         self.raw_lexicon = raw_lexicon
     def read_exps(self):
-        print('generating '+exp_file_add)
+        if os.path.exists(exp_file_dump):
+            with open(exp_file_dump, "rb") as f:
+                self.new_exps = pickle.load(f)
+            return 0
+        print('generating '+exp_file)
         nlp = StanfordCoreNLP(corenlp_model_path)
-        with open(exp_file_add,"r") as f:
+        with open(exp_file,"r") as f:
             exps = json.load(f)
-
-        if (os.path.exists(exp_file)):
-            with open(exp_file, "r") as f:
-                old_exps = json.load(f)
-            with open(exp_file, "w") as f:
-                json.dump(old_exps + exps, f)
-        else:
-            with open(exp_file, "w") as f:
-                json.dump(exps, f)
-
         self.new_exps = []
         for exp in exps:
             exp['sent'] = generate_phrase(exp['sent'],nlp)
             self.new_exps.append(exp)
         nlp.close()
-        if(os.path.exists(exp_file_dump)):
-            with open(exp_file_dump,"rb") as f:
-                old_new_exps = pickle.load(f)
-            with open(exp_file_dump,"wb") as f:
-                pickle.dump(old_new_exps+self.new_exps,f)
-        else:
-            with open(exp_file_dump,"wb") as f:
-                pickle.dump(self.new_exps,f)
+        with open(exp_file_dump,"wb") as f:
+            pickle.dump(self.new_exps,f)
 
     def expand_lexicon(self):
         sents_tokenized = []
@@ -307,6 +289,15 @@ class FromExp2LF():
         self.raw_lexicon = add_new_predicate(quote_words,self.raw_lexicon)
 
     def parse_all(self):
+        if os.path.exists('xs.pkl'):
+            print('reading')
+            with open('xs.pkl','rb') as f:
+                xs = pickle.load(f)
+            with open('ys.pkl','rb') as f:
+                ys = pickle.load(f)
+            with open('lfss.pkl', 'rb') as f:
+                Logic_formss = pickle.load(f)
+            return Logic_formss,xs,ys
         xs = []
         ys = []
         idx = []
@@ -352,6 +343,12 @@ class FromExp2LF():
         assert len(xs)==len(ys) and len(xs)==len(Logic_formss)
         print(len(xs))
         print(idx)
+        with open('xs.pkl','wb') as f:
+            pickle.dump(xs,f)
+        with open('ys.pkl','wb') as f:
+            pickle.dump(ys,f)
+        with open('lfss.pkl', 'wb') as f:
+            pickle.dump(Logic_formss, f)
 
         return Logic_formss, xs, ys
 
@@ -371,6 +368,6 @@ class FromExp2LF():
             self.parser.optimize()
 
 
-# if __name__=="__main__":
-#     train = FromExp2LF(True)
-#     train.Train()
+if __name__=="__main__":
+    train = FromExp2LF(True)
+    train.Train()

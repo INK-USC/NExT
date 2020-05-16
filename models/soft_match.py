@@ -339,3 +339,43 @@ def FIND_module(sent,pats,word_mat,config,is_train,rnn,scope='Find_module'):#sen
 
         return seq,scores_sim
 
+# def FIND_module(sent,pats,word_mat,config,is_train,scope='Find_module'):
+#     with tf.variable_scope(scope):
+#         keep_prob = config.keep_prob
+#         d = config.hidden
+#         batch_size = tf.shape(sent)[0]
+#         maxlength_sent = tf.shape(sent)[1]
+#         dim = tf.shape(word_mat)[1]
+#         num_pats = tf.shape(pats)[0]
+#
+#         sent_mask = tf.cast(sent, tf.bool)
+#
+#         pat_mask = tf.cast(pats, tf.bool)
+#         pat_len = tf.reduce_sum(tf.cast(pat_mask, tf.int32), axis=1)
+#         pats_size = pats.get_shape()[0]
+#
+#         with tf.variable_scope('embedding'):
+#             sent_emb = tf.nn.embedding_lookup(word_mat, sent)
+#             sent_emb = dropout(sent_emb, keep_prob=config.word_keep_prob, is_train=is_train, mode="embedding")
+#             pat_emb = tf.nn.embedding_lookup(word_mat, pats)
+#             pat_emb_d = dropout(pat_emb, keep_prob=config.keep_prob, is_train=is_train)
+#
+#         with tf.variable_scope('CNN_range_3'):
+#             pad = tf.zeros([pats_size,1,config.glove_dim],tf.float32)
+#             pat_emb_d = tf.concat([pad,pat_emb_d,pad],axis=1)
+#             pat_emb_d = tf.reshape(pat_emb_d,[pats_size,10+2,config.glove_dim,1])
+#             filt_size = 200
+#             pat = tf.layers.conv2d(inputs=pat_emb_d, filters=filt_size, kernel_size=[3, config.glove_dim],
+#                              padding='valid',
+#                              kernel_initializer=tf.contrib.layers.xavier_initializer_conv2d(),
+#                              name="conv3", reuse=tf.AUTO_REUSE)
+#             pat = tf.squeeze(tf.reduce_max(pat,axis=1))
+#
+#
+#             pad = tf.zeros([batch_size,1,config.glove_dim],tf.float32)
+#
+#             sent_range_3 = tf.layers.conv2d(inputs=tf.reshape(tf.concat([pad,sent_emb,pad],axis=1), filters=filt_size, kernel_size=[3, config.glove_dim],
+#                              padding='valid',
+#                              kernel_initializer=tf.contrib.layers.xavier_initializer_conv2d(),
+#                              name="conv3", reuse=tf.AUTO_REUSE)
+#             sent_range_3 = tf.squeeze(sent_range_3)

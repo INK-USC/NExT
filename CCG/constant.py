@@ -8,12 +8,10 @@ epoch_num = 5
 lr = 0.05
 beam_width = 100
 
-exp_file = './CCG/raw_explanations.json'
-exp_file_dump = './CCG/exp_data_turk.pkl'
-corenlp_model_path = './stanford-corenlp-full-2018-10-05'
+exp_file = 'all_exp_add.json'
+exp_file_dump = 'exp_data_turk.pkl'
+corenlp_model_path = '../stanford-corenlp-full-2018-10-05'
 
-
-exp_file_add = "./CCG/raw_explanations_add.json"
 
 # Parsing parameters
 predicate2idx =  {'$Arg': 0, '$The': 1, '$True': 2, '$False': 3, '$And': 4, '$Or': 5, '$Not': 6, '$All': 7, '$Any': 8, '$None': 9, '$Is': 10, '$Exists': 11, '$Int': 12, '$Direct': 13, '$Last': 14, '$AtLeastOne': 15, '$Because': 16, '$Equals': 17, '$NotEquals': 18, '$LessThan': 19, '$AtMost': 20, '$AtLeast': 21, '$MoreThan': 22, '$In': 23, '$Contains': 24, '$Separator': 25, '$Possessive': 26, '$Count': 27, '$Punctuation': 28, '$Tuple': 29, '$ArgXListAnd': 30, '$EachOther': 31, '$Token': 32, '$Word': 33, '$Char': 34, '$Upper': 35, '$Lower': 36, '$Capital': 37, '$StartsWith': 38, '$EndsWith': 39, '$Left': 40, '$Right': 41, '$Within': 42, '$Apart': 43, '$Sentence': 44, '$Between': 45, '$PersonNER': 46, '$LocationNER': 47, '$DateNER': 48, '$NumberNER': 49, '$OrganizationNER': 50, '$NorpNER': 51, '$ArgX': 52, '$ArgY': 53, '$There': 54, '$By': 55, '$Which': 56, '$Numberof': 57, '$Of': 58, '$Link': 59, '$SandWich': 60}

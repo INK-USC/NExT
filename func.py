@@ -5,29 +5,19 @@ INF = 1e30
 
 class Cudnn_RNN:
 
-    def __init__(self, num_layers, num_units, mode="lstm",keep_prob=1.0, is_train=None, scope="cudnn_rnn", gpu=True):
+    def __init__(self, num_layers, num_units, mode="lstm", keep_prob=1.0, is_train=None, scope="cudnn_rnn"):
         self.num_layers = num_layers
         self.rnns = []
         self.mode = mode
         if mode == "gru":
-            if gpu:
-                rnn = tf.contrib.cudnn_rnn.CudnnGRU
-            else:
-                rnn = tf.contrib.rnn.GRUCell
+            rnn = tf.contrib.cudnn_rnn.CudnnGRU
         elif mode == "lstm":
-            if gpu:
-                rnn = tf.contrib.cudnn_rnn.CudnnLSTM
-            else:
-                rnn = tf.contrib.rnn.BasicLSTM
+            rnn = tf.contrib.cudnn_rnn.CudnnLSTM
         else:
             raise Exception("Unknown mode for rnn")
         for layer in range(num_layers):
-            if gpu:
-                rnn_fw = rnn(1, num_units)
-                rnn_bw = rnn(1, num_units)
-            else:
-                rnn_fw = rnn(num_units)
-                rnn_bw = rnn(num_units)
+            rnn_fw = rnn(1, num_units)
+            rnn_bw = rnn(1, num_units)
             self.rnns.append((rnn_fw, rnn_bw, ))
 
     def __call__(self, inputs, seq_len, keep_prob=1.0, is_train=None, concat_layers=True):
