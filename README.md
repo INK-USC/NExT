@@ -49,15 +49,15 @@ stanfordcorenlp
 * download stanford-corenlp-full-2018-10-05(https://stanfordnlp.github.io/CoreNLP/history.html)，put it in ```./```.
 
 * ```cd CCG
-python parser.py
-python get_data_for_classifier.py
-mv TK* ../data/tacred
-mv explanations.json ../data/tacred
-mv exp2pat.json ../```
+    python parser.py
+    python get_data_for_classifier.py
+    mv TK* ../data/tacred
+    mv explanations.json ../data/tacred
+    mv exp2pat.json ../```
 
 * ```cd ../data/tacred
     python generate_pre.py
-    EXPORT PYTHONPATH=$PYTHONPATH:\<project_dir\>/NExT/
+    EXPORT PYTHONPATH=$PYTHONPATH:<project_dir>/NExT/
     python data_process.py
     cd ../../
     python tacred.py --gpu <gpu_id>```
