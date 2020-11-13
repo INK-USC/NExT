@@ -86,7 +86,6 @@ class TrainedCCGParser():
                     explanation = datapoint.raw_explanation
                     chunks = utils.clean_and_chunk(explanation, nlp)
                     self.loaded_data[i].chunked_explanation = chunks
-                
                 tokenizations = [[]]
                 for chunk in chunks:
                     predicates = utils.convert_chunk_to_terminal(chunk)
@@ -200,16 +199,14 @@ class TrainedCCGParser():
         hashes = {}
         functions_to_delete = []
         for i, row in enumerate(matrix):
-            # print(row)
             row_hash = hash(str(row)) # same as babble-labbel
             if row_hash in hashes:
                 functions_to_delete.append(i)
                 # print("{} conflicted with {}".format(i, hashes[row_hash]))
             else:
                 hashes[row_hash] = i
-        
-        # print("Hash Filter {}".format(functions_to_delete))
 
+        # print("Hash Filter {}".format(functions_to_delete))
         functions_to_delete.sort(reverse=True)
         for index in functions_to_delete:
             del labeling_functions[index]

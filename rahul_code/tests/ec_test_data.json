@@ -107,7 +107,7 @@
     {
         "tweet": "Love is when all your happiness and all your sadness and all your feelings are dependent on another person .",
         "label": "trust",
-        "explanation": "The tweet contains the phrase 'dependent on another person'",
+        "explanation": "The phrase 'dependent on another person' is in the tweet",
         "word": "dependent on another person",
         "rec": false
     }

@@ -107,7 +107,7 @@ def convert_chunk_to_terminal(chunk):
     num_lexicon_dict = {elem:str(i+1) for i,elem in enumerate(num_lexicon)}
     if chunk in constants.TOKEN_TERMINAL_MAP:
         return constants.TOKEN_TERMINAL_MAP[chunk]
-    elif chunk.startswith("\"") and chunk.endswith("\""):
+    elif chunk.startswith("\"") and chunk.endswith("\"") or chunk in constants.PHRASE_VALUES:
         return [chunk]
     elif chunk.isdigit():
         return ["\""+chunk+"\""]

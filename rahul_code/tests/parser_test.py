@@ -62,7 +62,7 @@ def test_parser_tokenize_explanations():
          [['$The', '$Sentence', '$Contains', '$The', '$Word', '"bitSPACEsurprised"']],
          [['$The', '$Sentence', '$Contains', '$The', '$Word', '"soSPACEsudden"']],
          [['$The', '$Sentence', '$Contains', '$The', '$Word', '"honesty"']],
-         [['$The', '$Sentence', '$Contains', '$The', '$Word', '"dependentSPACEonSPACEanotherSPACEperson"']]
+         [['$The', '$Word', '"dependentSPACEonSPACEanotherSPACEperson"', '$In', '$The', '$Sentence']]
     ]
 
     assert len(loaded_data) == 16
@@ -95,7 +95,7 @@ def test_parser_build_labeling_rules():
         {('.root', ('@In0', 'Sentence', ('@Word', 'bit surprised'))): 38},
         {('.root', ('@In0', 'Sentence', ('@Word', 'so sudden'))): 38},
         {('.root', ('@In0', 'Sentence', ('@Word', 'honesty'))): 38},
-        {('.root', ('@In0', 'Sentence', ('@Word', 'dependent on another person'))): 38},
+        {('.root', ('@In0', 'Sentence', ('@Word', 'dependent on another person'))): 28},
     ]
 
     assert len(loaded_data) == 16
@@ -107,7 +107,7 @@ def test_parser_build_labeling_rules():
         for key in keys:
             assert key in datapoint.labeling_functions
     
-def test_parser_build_labeling_rules():
+def test_filter_matrix():
     explanation_file = ec_ccg_trainer.params["explanation_file"]
     ec_ccg_trainer.load_data(explanation_file)
     parser = ec_ccg_trainer.parser
