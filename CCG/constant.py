@@ -98,6 +98,7 @@ a: (Word1,Word2)
 Selection = ['NER']
 
 
+
 def count_sublist(lis,sublis):
     cnt = 0
     if len(sublis)>len(lis):
@@ -285,7 +286,6 @@ def at_morethan(funcx,nouny,w,c):
 
 
 #function for @In0
-
 def at_In0(arg,w,c):
     assert arg=='Sentence'
     if isinstance(w,tuple):

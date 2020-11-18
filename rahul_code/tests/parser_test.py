@@ -5,8 +5,8 @@ import pickle
 from CCG_new.parser import CCGParserTrainer, TrainedCCGParser
 from CCG_new.utils import prepare_token_for_rule_addition
 
-ec_ccg_trainer = CCGParserTrainer(task="ec", explanation_file="ec_test_data.json",
-                               unlabeled_data_file="carer_test_data.json")
+ec_ccg_trainer = CCGParserTrainer(task="ec", explanation_file="data/ec_test_data.json",
+                               unlabeled_data_file="data/carer_test_data.json")
 
 def test_trainer_load_data():
     explanation_file = ec_ccg_trainer.params["explanation_file"]
@@ -16,7 +16,7 @@ def test_trainer_load_data():
     for datapoint in loaded_data:
         assert "DataPoint" in str(type(datapoint))
 
-def test_trainer_prepare_loaded_data():
+def test_trainer_prepare_unlabeled_data():
     unlabeled_data_file = ec_ccg_trainer.params["unlabeled_data_file"]
     ec_ccg_trainer.prepare_unlabeled_data(unlabeled_data_file)
     unlabeled_data = ec_ccg_trainer.unlabeled_data
@@ -115,7 +115,7 @@ def test_filter_matrix():
     parser.tokenize_explanations()
     parser.set_standard_parser()
     parser.build_labeling_rules()
-    with open("carer_test_data_phrase.p", "rb") as f:
+    with open("data/carer_test_data_phrase.p", "rb") as f:
         unlabeled_data = pickle.load(f)
     parser.matrix_filter(unlabeled_data)
     # filter count set to zero, so certain explanations don't fire at all on this small sample

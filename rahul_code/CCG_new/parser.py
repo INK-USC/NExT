@@ -189,6 +189,8 @@ class TrainedCCGParser():
             if r_sum/total_data_points > self.high_end_filter_pct or r_sum < self.low_end_filter_count:
                 functions_to_delete.append(i)
         
+        # print("Total Hits {}".format(sum(row_sums)))
+        
         # print("Count Filter {}".format(functions_to_delete))
 
         matrix = np.delete(matrix, functions_to_delete, 0)
@@ -270,3 +272,6 @@ class CCGParserTrainer():
         self.parser.build_labeling_rules()
         self.prepare_unlabeled_data(self.params["unlabeled_data_file"])
         self.parser.matrix_filter(self.unlabeled_data)
+    
+    def get_parser(self):
+        return self.parser

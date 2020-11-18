@@ -3,6 +3,7 @@ import string
 from CCG_new import constants
 from CCG_new import util_classes
 
+# this can't handle apostraphe's within the text
 def normalize_quotes(text):
     """
         Converts Various possible quote characters to a single " character
@@ -202,7 +203,7 @@ def add_rules_to_grammar(tokens, grammar_string):
         this function adds those rules to the grammar.
 
         Arguments:
-            tokens        (list) : tokens that require new rules to be added to the grammar
+            tokens         (arr) : tokens that require new rules to be added to the grammar
             grammar_string (str) : string representation of the base grammar to add to
     """
     grammar = grammar_string
