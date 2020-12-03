@@ -213,7 +213,7 @@ def build_query_dataset(explanation_data, vocab, label_filter, embedding_name, r
         if label_filter is None or label in label_filter:
             possible_queries = extract_queries_from_explanations(explanation)
             for query in possible_queries:
-                queries.append(query[1:len(text)-1])
+                queries.append(query[1:len(query)-1])
                 labels.append(label)
     
     tokenized_queries = convert_text_to_tokens(queries, vocab, tokenize)
