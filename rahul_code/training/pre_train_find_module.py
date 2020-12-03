@@ -148,7 +148,7 @@ def main():
         batch_count = 0
         model.train()
         # iterate over batches
-        for step, batch in enumerate(tqdm(train_dataset.as_batches(batch_size=args.train_batch_size, i=epoch))):
+        for step, batch in enumerate(tqdm(train_dataset.as_batches(batch_size=args.train_batch_size, seed=epoch))):
             # push the batch to gpu
             batch = [r.to(device) for r in batch]
 
