@@ -298,7 +298,7 @@ def build_pre_train_find_datasets_from_splits(train_path, dev_path, test_path, e
     
     vocab = build_vocab(train, embedding_name, random_state=-1)
 
-    build_variable_legnth_text_dataset(train, vocab, "train", embedding_name, random_state=-1)
+    build_variable_length_text_dataset(train, vocab, "train", embedding_name, random_state=-1)
 
     with open(dev_path) as f:
         dev = json.load(f)
