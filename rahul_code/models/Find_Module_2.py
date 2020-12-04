@@ -6,8 +6,8 @@ class Find_Module(nn.Module):
     """
         Find Module per the NExT paper's description
     """
-    def __init__(self, emb_weight, padding_idx, emb_dim, hidden_dim, encoding_dim, cuda,
-                 embedding_dropout=0.9, encoding_dropout=0.5, sliding_win_size=3):
+    def __init__(self, emb_weight, padding_idx, emb_dim, hidden_dim, cuda,
+                 n_layers=2, embedding_dropout=0.96, encoding_dropout=0.5, sliding_win_size=3):
         """
             Arguments:
                 emb_weight (torch.tensor) : created vocabulary's vector representation for each token, where
@@ -17,7 +17,6 @@ class Find_Module(nn.Module):
                 emb_dim             (int) : legnth of each vector representing a token in the vocabulary
                 hidden_dim          (int) : size of hidden representation emitted by lstm
                                             (we are using a bi-lstm, final hidden_dim will be 2*hidden_dim)
-                encoding_dim        (int) : size of vector representing token before being pooled
                 cuda               (bool) : is a gpu available for usage
                 embedding_dropout (float) : percentage of initial embedding's components to be randomly
                                             zeroed out 
@@ -31,16 +30,15 @@ class Find_Module(nn.Module):
         self.padding_idx = padding_idx
         self.emb_dim = emb_dim
         self.hidden_dim = hidden_dim
-        self.encoding_dim = encoding_dim
+        self.encoding_dim = 2 * hidden_dim
         self.sliding_win_size = sliding_win_size
         self.cuda = cuda
 
         self.embedding_dropout = nn.Dropout(p=embedding_dropout)
         self.embeddings = nn.Embedding.from_pretrained(emb_weight, freeze=False, padding_idx=self.padding_idx)
-        self.bilstm = nn.LSTM(self.emb_dim, self.hidden_dim, bidirectional=True, batch_first=True)
+        self.bilstm = nn.LSTM(self.emb_dim, self.hidden_dim, num_layers=n_layers, bidirectional=True, batch_first=True)
         self.encoding_dropout = nn.Dropout(p=encoding_dropout)
-        self.encoding_compression_layer = nn.Linear(2*self.hidden_dim, self.encoding_dim)
-        
+                
         self.attention_matrix = nn.Linear(self.encoding_dim, self.encoding_dim)
         temp_att_vector = torch.zeros(self.encoding_dim, 1)
         nn.init.xavier_uniform_(temp_att_vector)
@@ -85,7 +83,6 @@ class Find_Module(nn.Module):
         seq_embs = self.embedding_dropout(seq_embs)
         hidden_states, _ =  self.bilstm(seq_embs) # hidden_states =  N x seq_len x 2*hidden_dim
         hidden_states = self.encoding_dropout(hidden_states)
-        hidden_states = self.encoding_compression_layer(hidden_states) #hidden_states = N x seq_len x encoding_dim
 
         return hidden_states
     
@@ -295,42 +292,3 @@ class Find_Module(nn.Module):
             neg_scores = neg_scores.to(device)
 
         return pos_scores, neg_scores
-
-    # def compute_similarities(self, seqs, queries):
-    # 	"""
-    # 		seqs : N * seq_len_1
-    # 		queries : Q * seq_len_2 <-fixed
-    # 	"""
-    # 	queries_encodings = self.encode_tokens(queries) # Q x seq_len_2 x encoding_dim
-    # 	seqs_encodings = self.encode_tokens(seqs) # N x seq_len_1 x encoding_dim
-
-    # 	queries_pooled_encodings = self.attention_pooling(queries_encodings) # Q x 1 x encoding_dim
-    # 	updated_queries_vectors = torch.matmul(queries_pooled_encodings, self.feature_weight_matrix) # Q x 1 x encoding_dim
-    # 	queries_encoding_matrix = updated_queries_vectors.squeeze(1) # Q x encoding_dim
-    # 	normalized_queries_vectors = f.normalize(queries_encoding_matrix, p=2, dim=1) # normalizing rows of each matrix in the batch
-    # 	normalized_queries_vectors = normalized_queries_vectors.permute(1, 0) # encoding_dim x Q
-
-    # 	# each is: N x seq_len_1 x encoding_dim
-    # 	normalized_hidden_states, normalized_forward_hidden_states, normalize_backward_hidden_states = self.build_sliding_window_rep(seqs_encodings)
-        
-    # 	hs_cosine = torch.matmul(normalized_hidden_states, normalized_queries_vectors).permute(0,2,1) # N x Q x seq_len_1
-    # 	fwd_hs_cosine = torch.matmul(normalized_forward_hidden_states, normalized_queries_vectors).permute(0,2,1) # N x Q x seq_len_1
-    # 	bwd_hs_cosine = torch.matmul(normalize_backward_hidden_states, normalized_queries_vectors.permute(0,2,1)) # N x Q x seq_len_1
-        
-    # 	batch, seq_len, encoding_dim = seqs_encodings.shape
-    # 	query_num, _, _ = queries_encodings.shape
-    # 	combined_cosines = torch.zeros(batch, query_num, seq_len, self.sliding_win_size) # N x Q x seq_len_1 x 3
-    # 	if self.sliding_win_size == 3:
-    # 		combined_cosines[:,:,:,0] = hs_cosine
-    # 		combined_cosines[:,:,:,1] = fwd_hs_cosine
-    # 		combined_cosines[:,:,:,2] = bwd_hs_cosine
-
-    # 	if self.cuda:
-    # 		device = torch.device("cuda")
-    # 		combined_cosines = combined_cosines.to(device)
-
-    # 	similarity_scores_per_query = torch.matmul(combined_cosines, self.sliding_window_weight).squeeze(3) # N x Q x seq_len1
-
-    # 	max_similarity_score_per_query, _ = torch.max(similarity_scores_per_query, dim=2) # N x Q
-        
-    # 	return max_similarity_score_per_query
