@@ -1,5 +1,6 @@
 import torch
 from torch.optim import Adagrad
+from transformers import AdamW
 import sys
 sys.path.append(".")
 sys.path.append("../")
@@ -89,6 +90,9 @@ def main():
                          type=int,
                          default=0,
                          help="start_epoch")
+    parser.add_argument('--use_adam',
+                        action='store_true',
+                        help="use adam optimizer")
 
     args = parser.parse_args()
 
@@ -131,7 +135,10 @@ def main():
     real_query_tokens = real_query_tokens.to(device)
 
     # define the optimizer
-    optimizer = Adagrad(model.parameters(), lr=args.learning_rate)   
+    if args.use_adam:
+        optimizer = AdamW(model.parameters(), lr=args.learning_rate)   
+    else:
+        optimizer = Adagrad(model.parameters(), lr=args.learning_rate)   
 
     # define loss functions
     find_loss_function  = nn.BCEWithLogitsLoss()
