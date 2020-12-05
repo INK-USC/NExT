@@ -150,8 +150,8 @@ def main():
     epoch_losses = []
     best_eval_loss = float('inf') 
 
-    for epoch in range(args.start_epoch-1,epochs):
-        print('\n Epoch {:} / {:}'.format(epoch + 1, epochs))
+    for epoch in range(args.start_epoch, args.start_epoch+epochs):
+        print('\n Epoch {:} / {:}'.format(epoch + 1, args.start_epoch+epochs))
 
         total_loss, find_total_loss, sim_total_loss = 0, 0, 0
         batch_count = 0
