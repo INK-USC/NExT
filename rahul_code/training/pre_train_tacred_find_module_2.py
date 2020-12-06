@@ -4,7 +4,7 @@ from transformers import AdamW
 import sys
 sys.path.append(".")
 sys.path.append("../")
-from util_functions import build_pre_train_find_datasets_from_splits, similarity_loss_function, evaluate_find_module
+from util_functions import build_pre_train_find_datasets_from_splits, similarity_loss_function, evaluate_find_module, generate_save_string
 from util_classes import PreTrainingFindModuleDataset
 from models import Find_Module_2
 import pickle
@@ -37,11 +37,11 @@ def main():
                         default="../data/tacred_explanations.json",
                         help="Path to explanation data.")
     parser.add_argument("--train_batch_size",
-                        default=100,
+                        default=128,
                         type=int,
                         help="Total batch size for train.")
     parser.add_argument("--eval_batch_size",
-                        default=100,
+                        default=128,
                         type=int,
                         help="Total batch size for eval.")
     parser.add_argument("--learning_rate",
@@ -98,21 +98,24 @@ def main():
 
     torch.manual_seed(args.seed)
     random.seed(args.seed)
+    sample_rate = 0.4
 
     if args.build_pre_train:
         build_pre_train_find_datasets_from_splits(args.train_path, args.dev_path, args.train_path,
                                                   args.explanation_data_path, embedding_name=args.embeddings,
-                                                  sample_rate=0.5)
+                                                  sample_rate=sample_rate)
 
-    with open("../data/pre_train_data/train_data_{}_-1.p".format(args.embeddings), "rb") as f:
+    save_string = generate_save_string(args.embeddings, sample=sample_rate)
+
+    with open("../data/pre_train_data/train_data_{}.p".format(save_string), "rb") as f:
         train_dataset = pickle.load(f)
     
-    dev_path = "../data/pre_train_data/dev_data_{}_-1.p".format(args.embeddings)
+    dev_path = "../data/pre_train_data/dev_data_{}.p".format(save_string)
     
-    with open("../data/pre_train_data/vocab_{}_-1.p".format(args.embeddings), "rb") as f:
+    with open("../data/pre_train_data/vocab_{}.p".format(save_string), "rb") as f:
         vocab = pickle.load(f)
     
-    with open("../data/pre_train_data/sim_data_{}_-1.p".format(args.embeddings), "rb") as f:
+    with open("../data/pre_train_data/sim_data_{}.p".format(save_string), "rb") as f:
         sim_data = pickle.load(f)
     
     pad_idx = vocab["<pad>"]
@@ -206,17 +209,17 @@ def main():
         dev_avg_loss, dev_avg_find_loss, dev_avg_sim_loss, dev_f1_score = eval_results
         print("Finished Evaluation")
         
-        if dev_f1_score < best_f1_score or (dev_f1_scores == best_f1_score and dev_avg_loss < best_dev_loss):
+        if dev_f1_score < best_f1_score or (dev_f1_score == best_f1_score and dev_avg_loss < best_dev_loss):
             print("Saving Model")
             if len(args.model_save_dir) > 0:
                 dir_name = args.model_save_dir
             else:
                 dir_name = "../data/saved_models/"
             torch.save(model.state_dict(), "{}Find-Module-pt_{}.pt".format(dir_name, args.experiment_name))
-            best_eval_loss = dev_avg_loss
+            best_f1_score = dev_f1_score
             best_dev_loss = dev_avg_loss
 
-        epoch_losses.append((train_avg_loss, train_avg_find_loss, train_avg_sim_loss, dev_avg_loss, dev_avg_find_loss, dev_avg_sim_loss, dev_f1_scores))
+        epoch_losses.append((train_avg_loss, train_avg_find_loss, train_avg_sim_loss, dev_avg_loss, dev_avg_find_loss, dev_avg_sim_loss, dev_f1_score))
 
         print(epoch_losses)
 

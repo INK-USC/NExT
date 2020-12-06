@@ -16,6 +16,20 @@ possible_embeddings = ['charngram.100d', 'fasttext.en.300d', 'fasttext.simple.30
 'glove.840B.300d', 'glove.twitter.27B.25d', 'glove.twitter.27B.50d', 'glove.twitter.27B.100d',
 'glove.twitter.27B.200d', 'glove.6B.50d', 'glove.6B.100d', 'glove.6B.200d', 'glove.6B.300d']
 
+def generate_save_string(embedding_name, random_state=-1, sample=-1.0):
+    """
+        To allow for multiple datasets to exist at once, we add this string to identify which dataset a run
+        script should load.
+
+        Arguments:
+            embedding_name (str) : name of pre-trained embedding to use
+                                   (possible names can be found in possible_embeddings)
+            random_state   (int) : random state used to split data into train, dev, test (if applicable)
+            sample       (float) : percentage of possible data used for training
+    """
+    return "_".join([embedding_name, str(random_state), str(sample)])
+
+
 def tokenize(sentence, tokenizer=nlp):
     """
         Simple tokenizer function that is needed to build a vocabulary
@@ -33,7 +47,7 @@ def tokenize(sentence, tokenizer=nlp):
     sentence = sentence.replace('\n', '')
     return [tok.text for tok in tokenizer.tokenizer(sentence)]
 
-def build_vocab(train, embedding_name, random_state, save=True):
+def build_vocab(train, embedding_name, save_string="", save=True):
     """
         Note: Using the Field class will be deprecated soon by TorchText, however at the time of writing the
               new methodology for creating a vocabulary has not been released.
@@ -49,8 +63,7 @@ def build_vocab(train, embedding_name, random_state, save=True):
             train          (arr) : array of text sequences that make up one's training data
             embedding_name (str) : name of pre-trained embedding to use 
                                    (possible names can be found in possible_embeddings)
-            random_state   (int) : random state used to split data into train, dev, test
-                                   (used only for naming purposes)
+            save_string    (str) : string to indicate some of the hyper-params used to create the vocab
         Returns:
             torchtext.vocab : vocab object
     """
@@ -68,7 +81,7 @@ def build_vocab(train, embedding_name, random_state, save=True):
     print("Finished building vocab of size {}".format(str(len(vocab))))
 
     if save:
-        file_name = "../data/pre_train_data/vocab_{}_{}.p".format(embedding_name, str(random_state))
+        file_name = "../data/pre_train_data/vocab_{}.p".format(save_string)
 
         with open(file_name, "wb") as f:
             pickle.dump(vocab, f)
@@ -136,7 +149,7 @@ def build_pretraining_triples(data, vocab, tokenize_fn):
     
     return token_seqs, queries, labels
 
-def build_variable_length_text_dataset(data, vocab, split_name, embedding_name, random_state):
+def build_variable_length_text_dataset(data, vocab, split_name, save_string):
     """
         Given a split of data (train, dev, test) this function builds a PreTrainingFindModuleDataset and saves
         it to disk. A VariableLegnthTextDataset object handles batching sequences together and ensuring
@@ -146,8 +159,7 @@ def build_variable_length_text_dataset(data, vocab, split_name, embedding_name, 
             data              (arr) : split of data that needs to be processed
             vocab (torchtext.vocab) : vocab object used for conversion between text token and token_id
             split_name        (str) : name of split (used for naming)
-            embedding_name    (str) : name of pre-trained embeddings being used in vocab (used for naming)
-            random_state      (int) : random seed used for splitting data (used for naming)
+            save_string       (str) : string to indicate some of the hyper-params used to create the vocab
     """
     pad_idx = vocab["<pad>"]
     token_seqs, queries, labels = build_pretraining_triples(data, vocab, tokenize)
@@ -155,7 +167,7 @@ def build_variable_length_text_dataset(data, vocab, split_name, embedding_name, 
 
     print("Finished building {} dataset of size: {}".format(split_name, str(len(token_seqs))))
 
-    file_name = "../data/pre_train_data/{}_data_{}_{}.p".format(split_name, embedding_name, str(random_state))
+    file_name = "../data/pre_train_data/{}_data_{}.p".format(split_name, save_string)
 
     with open(file_name, "wb") as f:
         pickle.dump(dataset, f)
@@ -186,7 +198,7 @@ def extract_queries_from_explanations(explanation):
     return []
 
 
-def build_query_dataset(explanation_data, vocab, label_filter, embedding_name, random_state):
+def build_query_dataset(explanation_data, vocab, label_filter, save_string):
     """
         Given a list of explanations for labeling decisions, we find those explanations that include phrases
         that must exist in a text-sequence for a label to be applied to the text sequence.
@@ -202,8 +214,7 @@ def build_query_dataset(explanation_data, vocab, label_filter, embedding_name, r
             vocab (torchtext.vocab) : vocab object used for conversion between text token and token_id
             label_filter      (arr) : labels to consider when extracting queries from explanations
                                       (allows user to ignore explanations associated with certain labels)
-            embedding_name    (str) : name of pre-trained embeddings being used in vocab (used for naming)
-            random_state      (int) : random seed used for unlabeled splitting data (used for naming)
+            save_string       (str) : string to indicate some of the hyper-params used to create the vocab
     """
     queries = []
     labels = []
@@ -220,7 +231,7 @@ def build_query_dataset(explanation_data, vocab, label_filter, embedding_name, r
 
     print("Finished tokenizing actual queries, count: {}".format(str(len(tokenized_queries))))
 
-    file_name = "../data/pre_train_data/sim_data_{}_{}.p".format(embedding_name, str(random_state))
+    file_name = "../data/pre_train_data/sim_data_{}.p".format(save_string)
 
     with open(file_name, "wb") as f:
         pickle.dump({"queries" : tokenized_queries, "labels" : labels}, f)
@@ -263,21 +274,23 @@ def build_pre_train_find_datasets(file_path, explanation_path, embedding_name="g
     train, dev = train_test_split(text_data, train_size=0.8, random_state=random_state)
     dev, test = train_test_split(dev, train_size=0.5, random_state=random_state)
 
-    vocab = build_vocab(train, embedding_name, random_state)
+    save_string = generate_save_string(embedding_name, random_state=random_state, sample=sample_rate)
 
-    build_variable_length_text_dataset(train, vocab, "train", embedding_name, random_state)
+    vocab = build_vocab(train, embedding_name, random_state, save_string)
 
-    build_variable_length_text_dataset(dev, vocab, "dev", embedding_name, random_state)
+    build_variable_length_text_dataset(train, vocab, "train", save_string)
 
-    build_variable_length_text_dataset(test, vocab, "test", embedding_name, random_state)
+    build_variable_length_text_dataset(dev, vocab, "dev", save_string)
+
+    build_variable_length_text_dataset(test, vocab, "test", save_string)
 
     with open(explanation_path) as f:
         explanation_data = json.load(f)
 
-    build_query_dataset(explanation_data, vocab, label_filter, embedding_name, random_state)
+    build_query_dataset(explanation_data, vocab, label_filter, save_string)
 
 def build_pre_train_find_datasets_from_splits(train_path, dev_path, test_path, explanation_path,
-                                              embedding_name="glove.840B.300d", label_filter=None, sample_rate=-1):
+                                              embedding_name="glove.840B.300d", label_filter=None, sample_rate=-1.0):
     """
         Provided pre-split data, follow the steps taken in build_pre_train_find_datasets
 
@@ -301,24 +314,26 @@ def build_pre_train_find_datasets_from_splits(train_path, dev_path, test_path, e
         sample_number = int(len(train) * sample_rate)
         train_sample = random.sample(train, sample_number)
     
-    vocab = build_vocab(train, embedding_name, random_state=-1)
+    save_string = generate_save_string(embedding_name, sample=sample_rate)
 
-    build_variable_length_text_dataset(train_sample, vocab, "train", embedding_name, random_state=-1)
+    vocab = build_vocab(train, embedding_name, save_string)
+
+    build_variable_length_text_dataset(train_sample, vocab, "train", save_string)
 
     with open(dev_path) as f:
         dev = json.load(f)
 
-    build_variable_length_text_dataset(dev, vocab, "dev", embedding_name, random_state=-1)
+    build_variable_length_text_dataset(dev, vocab, "dev", save_string)
 
     with open(test_path) as f:
         test = json.load(f)
     
-    build_variable_length_text_dataset(test, vocab, "test", embedding_name, random_state=-1)
+    build_variable_length_text_dataset(test, vocab, "test", save_string)
 
     with open(explanation_path) as f:
         explanation_data = json.load(f)
 
-    build_query_dataset(explanation_data, vocab, label_filter, embedding_name, random_state=-1)
+    build_query_dataset(explanation_data, vocab, label_filter, save_string)
 
 def similarity_loss_function(pos_scores, neg_scores):
     """
