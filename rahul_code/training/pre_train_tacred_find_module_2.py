@@ -101,7 +101,8 @@ def main():
 
     if args.build_pre_train:
         build_pre_train_find_datasets_from_splits(args.train_path, args.dev_path, args.train_path,
-                                      args.explanation_data_path, embedding_name=args.embeddings)
+                                                  args.explanation_data_path, embedding_name=args.embeddings,
+                                                  sample_rate=0.5)
 
     with open("../data/pre_train_data/train_data_{}_-1.p".format(args.embeddings), "rb") as f:
         train_dataset = pickle.load(f)
@@ -148,7 +149,8 @@ def main():
     epochs = args.epochs
 
     epoch_losses = []
-    best_eval_loss = float('inf') 
+    best_f1_score = float('inf')
+    best_dev_loss = float('inf') 
 
     for epoch in range(args.start_epoch, args.start_epoch+epochs):
         print('\n Epoch {:} / {:}'.format(epoch + 1, args.start_epoch+epochs))
@@ -201,10 +203,10 @@ def main():
 
         print("Starting Evaluation")
         eval_results = evaluate_find_module(dev_path, real_query_tokens, sim_data["labels"], model, find_loss_function, sim_loss_function, args.eval_batch_size, args.gamma)
-        dev_avg_loss, dev_avg_find_loss, dev_avg_sim_loss, dev_f1_scores = eval_results
+        dev_avg_loss, dev_avg_find_loss, dev_avg_sim_loss, dev_f1_score = eval_results
         print("Finished Evaluation")
         
-        if dev_avg_loss < best_eval_loss:
+        if dev_f1_score < best_f1_score or (dev_f1_scores == best_f1_score and dev_avg_loss < best_dev_loss):
             print("Saving Model")
             if len(args.model_save_dir) > 0:
                 dir_name = args.model_save_dir
@@ -212,6 +214,7 @@ def main():
                 dir_name = "../data/saved_models/"
             torch.save(model.state_dict(), "{}Find-Module-pt_{}.pt".format(dir_name, args.experiment_name))
             best_eval_loss = dev_avg_loss
+            best_dev_loss = dev_avg_loss
 
         epoch_losses.append((train_avg_loss, train_avg_find_loss, train_avg_sim_loss, dev_avg_loss, dev_avg_find_loss, dev_avg_sim_loss, dev_f1_scores))
 

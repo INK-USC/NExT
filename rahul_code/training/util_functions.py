@@ -277,7 +277,7 @@ def build_pre_train_find_datasets(file_path, explanation_path, embedding_name="g
     build_query_dataset(explanation_data, vocab, label_filter, embedding_name, random_state)
 
 def build_pre_train_find_datasets_from_splits(train_path, dev_path, test_path, explanation_path,
-                                              embedding_name="glove.840B.300d", label_filter=None):
+                                              embedding_name="glove.840B.300d", label_filter=None, sample_rate=-1):
     """
         Provided pre-split data, follow the steps taken in build_pre_train_find_datasets
 
@@ -291,14 +291,19 @@ def build_pre_train_find_datasets_from_splits(train_path, dev_path, test_path, e
             embedding_name   (str) : name of pre-trained embeddings being used in vocab
             label_filter     (arr) : labels to consider when extracting queries from explanations
                                      (allows user to ignore explanations associated with certain labels)
+            sample_rate    (float) : percentage of unlabeled data to use when building datasets for L_find
     """
 
     with open(train_path) as f:
         train = json.load(f)
     
+    if sample_rate > 0:
+        sample_number = int(len(train) * sample_rate)
+        train_sample = random.sample(train, sample_number)
+    
     vocab = build_vocab(train, embedding_name, random_state=-1)
 
-    build_variable_length_text_dataset(train, vocab, "train", embedding_name, random_state=-1)
+    build_variable_length_text_dataset(train_sample, vocab, "train", embedding_name, random_state=-1)
 
     with open(dev_path) as f:
         dev = json.load(f)

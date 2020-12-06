@@ -272,15 +272,15 @@ class Find_Module(nn.Module):
 
         for i, label in enumerate(labels):
             query_rep = pooled_reps[i].unsqueeze(0)
-            post_tensor_array = [queries_by_label[label][j] for j in list(queries_by_label[label].keys()) if j != i]
+            pos_tensor_array = [queries_by_label[label][j] for j in list(queries_by_label[label].keys()) if j != i]
             neg_tensor_array = []
             for label_2 in queries_by_label:
                 if label_2 != label:
                     for key in queries_by_label[label]:
                         neg_tensor_array.append(queries_by_label[label][key])
             
-            if len(post_tensor_array) and len(neg_tensor_array):
-                pos_tensor = torch.stack(post_tensor_array) # pos_count x encoding_dim
+            if len(pos_tensor_array) and len(neg_tensor_array):
+                pos_tensor = torch.stack(pos_tensor_array) # pos_count x encoding_dim
                 neg_tensor = torch.stack(neg_tensor_array) # neg_count x encoding_dim
                 pos_score, neg_score = self.compute_sim_query(query_rep, pos_tensor, neg_tensor)
                 pos_scores[i] = pos_score
