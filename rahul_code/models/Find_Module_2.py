@@ -43,7 +43,7 @@ class Find_Module(nn.Module):
         temp_att_vector = torch.zeros(self.encoding_dim, 1)
         nn.init.xavier_uniform_(temp_att_vector)
         self.attention_vector = nn.Parameter(temp_att_vector, requires_grad=True)
-        self.softmax = nn.Softmax(dim=2)
+        self.attn_softmax = nn.Softmax(dim=2)
 
         diagonal_vector = torch.zeros(self.encoding_dim, 1)
         nn.init.xavier_uniform_(diagonal_vector)
@@ -53,6 +53,7 @@ class Find_Module(nn.Module):
         temp_sliding_window_weight = torch.zeros(self.sliding_win_size, 1)
         nn.init.xavier_uniform_(temp_sliding_window_weight)
         self.sliding_window_weight = nn.Parameter(temp_sliding_window_weight, requires_grad=True)
+        self.weight_softmax = nn.Softmax(dim=0)
     
     
     def attention_pooling(self, hidden_states):
@@ -66,7 +67,7 @@ class Find_Module(nn.Module):
         linear_transform = self.attention_matrix(hidden_states) # linear_transform = N x seq_len x encoding_dim
         tanh_tensor = torch.tanh(linear_transform) # element wise tanh
         batch_dot_products = torch.matmul(tanh_tensor, self.attention_vector).permute(0,2,1) # batch_dot_product = batch x 1 x seq_len (initially it is batch x seq_len x 1)
-        batch_soft_max = self.softmax(batch_dot_products) #apply softmax along row
+        batch_soft_max = self.attn_softmax(batch_dot_products) #apply softmax along row
         pooled_rep = torch.bmm(batch_soft_max, hidden_states) # pooled_rep = batch x 1 x encoding_dim --> one per x :)
 
         return pooled_rep
@@ -184,7 +185,8 @@ class Find_Module(nn.Module):
                 device = torch.device("cuda")
                 combined_cosines = combined_cosines.to(device)
             
-            similarity_scores = torch.matmul(combined_cosines, self.sliding_window_weight) # similarity_scores = N x seq_len x 1
+            sliding_window_weights = self.weight_softmax(self.sliding_window_weight)
+            similarity_scores = torch.matmul(combined_cosines, sliding_window_weights) # similarity_scores = N x seq_len x 1
             
             return similarity_scores
         
