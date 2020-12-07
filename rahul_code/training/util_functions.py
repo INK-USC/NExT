@@ -9,6 +9,7 @@ import pickle
 from util_classes import PreTrainingFindModuleDataset
 from tqdm import tqdm
 import re
+import numpy as np
 
 nlp = spacy.load("en_core_web_sm")
 
@@ -316,7 +317,7 @@ def build_pre_train_find_datasets_from_splits(train_path, dev_path, test_path, e
     
     save_string = generate_save_string(embedding_name, sample=sample_rate)
 
-    vocab = build_vocab(train, embedding_name, save_string)
+    vocab = build_vocab(train_sample, embedding_name, save_string)
 
     build_variable_length_text_dataset(train_sample, vocab, "train", save_string)
 
@@ -381,6 +382,8 @@ def evaluate_find_module(data_path, act_queries, query_labels, model, find_loss_
         device = torch.device("cpu")
     
     total_loss, total_find_loss, total_sim_loss, total_f1_score = 0, 0, 0, 0
+    total_og_scores = []
+    total_new_scores = []
     batch_count = 0
 
     # iterate over batches
@@ -403,22 +406,26 @@ def evaluate_find_module(data_path, act_queries, query_labels, model, find_loss_
             string_loss = find_loss + gamma * sim_loss
             
             scores = token_scores.detach().cpu().numpy().flatten()
-            scores = [1 if score > 0.5  else 0 for score in scores]
+            new_scores = [1 if score > 0.5  else 0 for score in scores]
             f1_labels = labels.detach().cpu().numpy().flatten()
 
             total_loss = total_loss + string_loss.item()
             total_find_loss = total_find_loss + find_loss.item()
             total_sim_loss = total_sim_loss + sim_loss.item()
-            total_f1_score = total_f1_score + f1_score(f1_labels, scores)
+            total_f1_score = total_f1_score + f1_score(f1_labels, new_scores)
             batch_count += 1
+            total_og_scores.append(scores)
+            total_new_scores.append(new_scores)
 
     # compute the validation loss of the epoch
     avg_loss = total_loss / batch_count
     avg_find_loss = total_find_loss / batch_count
     avg_sim_loss = total_sim_loss / batch_count
     avg_f1_score = total_f1_score / batch_count
+    total_og_scores  = np.concatenate(total_og_scores, axis=0)
+    total_new_scores  = np.concatenate(total_new_scores, axis=0)
 
-    return avg_loss, avg_find_loss, avg_sim_loss, avg_f1_score
+    return avg_loss, avg_find_loss, avg_sim_loss, avg_f1_score, total_og_scores, total_new_scores
 
 def evaluate_find_loss(data_path, model, find_loss_fn, batch_size=128):
     """
@@ -448,7 +455,7 @@ def evaluate_find_loss(data_path, model, find_loss_fn, batch_size=128):
     total_find_loss = 0
     total_f1_score = 0
     batch_count = 0
-
+    
     # iterate over batches
     for step, batch in enumerate(tqdm(eval_dataset.as_batches(batch_size=batch_size, shuffle=False))):
         # push the batch to gpu

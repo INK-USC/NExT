@@ -72,7 +72,7 @@ def test_as_batches_no_shuffle():
 
     token_lengths = [10, 13, 26, 19]
     query_lengths = [3, 5, 4, 2]
-    for i, batch in enumerate(dataset.as_batches(batch_size=2, i=0, shuffle=False)):
+    for i, batch in enumerate(dataset.as_batches(batch_size=2, seed=0, shuffle=False)):
         b_tokens, b_queries, b_labels = batch
 
         assert b_tokens.shape[0] == 2

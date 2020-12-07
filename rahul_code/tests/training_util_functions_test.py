@@ -21,7 +21,7 @@ def test_build_vocab():
     
     embedding_name = "glove.6B.50d"
 
-    vocab = func.build_vocab(train, embedding_name, random_state, False)
+    vocab = func.build_vocab(train, embedding_name, save=False)
 
     tokens_in_order = ['<unk>', '<pad>', '<bos>', '<eos>', ':', 'some', 'strings', '!', "'s", ':)', '<', '>',
                        '?', 'are', 'can', 'coolio', 'here', 'interesting', 'intersting', 'let', 'make',
@@ -39,7 +39,7 @@ def test_convert_text_to_tokens():
     
     embedding_name = "glove.6B.50d"
 
-    vocab = func.build_vocab(train, embedding_name, random_state, False)
+    vocab = func.build_vocab(train, embedding_name, save=False)
 
     sample_data = ["Let's make ThEm MORe Intersting?",
                    "Some not so interesting strings!", 
@@ -60,7 +60,7 @@ def test_build_pretraining_triples():
     
     embedding_name = "glove.6B.50d"
 
-    vocab = func.build_vocab(train, embedding_name, random_state, False)
+    vocab = func.build_vocab(train, embedding_name, save=False)
 
     sample_data = ["Let's make ThEm MORe Intersting?",
                    "Some not so interesting strings!", 

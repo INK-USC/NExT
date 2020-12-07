@@ -37,11 +37,11 @@ def main():
                         default="../data/tacred_explanations.json",
                         help="Path to explanation data.")
     parser.add_argument("--train_batch_size",
-                        default=128,
+                        default=100,
                         type=int,
                         help="Total batch size for train.")
     parser.add_argument("--eval_batch_size",
-                        default=128,
+                        default=100,
                         type=int,
                         help="Total batch size for eval.")
     parser.add_argument("--learning_rate",
@@ -49,7 +49,7 @@ def main():
                         type=float,
                         help="The initial learning rate for Adam.")
     parser.add_argument("--epochs",
-                        default=10,
+                        default=20,
                         type=int,
                         help="Number of Epochs for training")
     parser.add_argument('--embeddings',
@@ -85,7 +85,7 @@ def main():
                         help="what to save the model file as")
     parser.add_argument('--load_model',
                         action='store_true',
-                        help="Whether to build load a model")
+                        help="Whether to load a model")
     parser.add_argument('--start_epoch',
                          type=int,
                          default=0,
@@ -98,7 +98,7 @@ def main():
 
     torch.manual_seed(args.seed)
     random.seed(args.seed)
-    sample_rate = 0.4
+    sample_rate = 0.1
 
     if args.build_pre_train:
         build_pre_train_find_datasets_from_splits(args.train_path, args.dev_path, args.train_path,
@@ -206,7 +206,7 @@ def main():
 
         print("Starting Evaluation")
         eval_results = evaluate_find_module(dev_path, real_query_tokens, sim_data["labels"], model, find_loss_function, sim_loss_function, args.eval_batch_size, args.gamma)
-        dev_avg_loss, dev_avg_find_loss, dev_avg_sim_loss, dev_f1_score = eval_results
+        dev_avg_loss, dev_avg_find_loss, dev_avg_sim_loss, dev_f1_score, total_og_scores, total_new_scores = eval_results
         print("Finished Evaluation")
         
         if dev_f1_score < best_f1_score or (dev_f1_score == best_f1_score and dev_avg_loss < best_dev_loss):
@@ -216,6 +216,10 @@ def main():
             else:
                 dir_name = "../data/saved_models/"
             torch.save(model.state_dict(), "{}Find-Module-pt_{}.pt".format(dir_name, args.experiment_name))
+            with open("../data/result_data/best_dev_total_og_scores_{}.p".format(args.experiment_name), "wb") as f:
+                pickle.dump(total_og_scores, f)
+            with open("../data/result_data/best_dev_total_new_scores_{}.p".format(args.experiment_name), "wb") as f:
+                pickle.dump(total_new_scores, f)
             best_f1_score = dev_f1_score
             best_dev_loss = dev_avg_loss
 
