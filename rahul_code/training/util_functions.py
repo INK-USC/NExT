@@ -313,13 +313,13 @@ def build_pre_train_find_datasets_from_splits(train_path, dev_path, test_path, e
     
     if sample_rate > 0:
         sample_number = int(len(train) * sample_rate)
-        train_sample = random.sample(train, sample_number)
+        train = random.sample(train, sample_number)
     
     save_string = generate_save_string(embedding_name, sample=sample_rate)
 
-    vocab = build_vocab(train_sample, embedding_name, save_string)
+    vocab = build_vocab(train, embedding_name, save_string)
 
-    build_variable_length_text_dataset(train_sample, vocab, "train", save_string)
+    build_variable_length_text_dataset(train, vocab, "train", save_string)
 
     with open(dev_path) as f:
         dev = json.load(f)
