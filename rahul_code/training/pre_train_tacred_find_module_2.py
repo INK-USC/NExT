@@ -145,7 +145,7 @@ def main():
         optimizer = Adagrad(model.parameters(), lr=args.learning_rate)   
 
     # define loss functions
-    find_loss_function  = nn.BCEWithLogitsLoss()
+    find_loss_function  = nn.BCEWithLogitsLoss(torch.tensor([15.0]))
     sim_loss_function = similarity_loss_function
 
     # number of training epochs
