@@ -98,10 +98,10 @@ def main():
 
     torch.manual_seed(args.seed)
     random.seed(args.seed)
-    sample_rate = 0.1
+    sample_rate = 0.67
 
     if args.build_pre_train:
-        build_pre_train_find_datasets_from_splits(args.train_path, args.dev_path, args.train_path,
+        build_pre_train_find_datasets_from_splits(args.train_path, args.dev_path, args.test_path,
                                                   args.explanation_data_path, embedding_name=args.embeddings,
                                                   sample_rate=sample_rate)
 
@@ -209,7 +209,7 @@ def main():
         dev_avg_loss, dev_avg_find_loss, dev_avg_sim_loss, dev_f1_score, total_og_scores, total_new_scores = eval_results
         print("Finished Evaluation")
         
-        if dev_f1_score < best_f1_score or (dev_f1_score == best_f1_score and dev_avg_loss < best_dev_loss):
+        if dev_f1_score > best_f1_score or (dev_f1_score == best_f1_score and dev_avg_loss < best_dev_loss):
             print("Saving Model")
             if len(args.model_save_dir) > 0:
                 dir_name = args.model_save_dir

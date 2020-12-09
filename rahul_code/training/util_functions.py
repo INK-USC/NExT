@@ -477,7 +477,7 @@ def evaluate_find_loss(data_path, model, find_loss_fn, batch_size=128):
             find_loss = find_loss_fn(token_scores, labels)
 
             scores = token_scores.detach().cpu().numpy().flatten()
-            scores = [1 if score > 0.5  else 0 for score in scores]
+            scores = [1 if score > 0  else 0 for score in scores]
             f1_labels = labels.detach().cpu().numpy().flatten()
 
             total_f1_score = total_f1_score + f1_score(f1_labels, scores)
