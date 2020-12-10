@@ -65,15 +65,19 @@ class Find_Module(nn.Module):
             Pools hidden states together using an trainable attention matrix and query vector
             Arguments:
                 hidden_states   (torch.tensor) : N x seq_len x encoding_dim
-                padding_indexes (torch.tensor) : N x seq_len x encoding_dim 
+                padding_indexes (torch.tensor) : N x seq_len
             Returns:
                 (torch.tensor) : N x 1 x encoding_dim
         """
-        padding_scores = self.padding_score * padding_indexes # N x seq_len x encoding_dim
+        padding_scores = self.padding_score * padding_indexes # N x seq_len
+        # print(padding_scores.shape)
+        # print(hidden_states.shape)
         linear_transform = self.attention_matrix(hidden_states) # linear_transform = N x seq_len x encoding_dim
         tanh_tensor = torch.tanh(linear_transform) # element wise tanh
-        batch_dot_products = torch.matmul(tanh_tensor, self.attention_vector).permute(0,2,1) # batch_dot_product = batch x 1 x seq_len (initially it is batch x seq_len x 1)
-        updated_batch_dot_products = batch_dot_products + padding_scores # making sure score of padding_idx tokens is incredibly low
+        batch_dot_products = torch.matmul(tanh_tensor, self.attention_vector) # batch_dot_product = batch x seq_len x 1
+        updated_batch_dot_products = batch_dot_products + padding_scores.unsqueeze(2) # making sure score of padding_idx tokens is incredibly low
+        updated_batch_dot_products = updated_batch_dot_products.permute(0,2,1) # batch x 1 x seq_len
+        # print(updated_batch_dot_products.shape)
         batch_soft_max = self.attn_softmax(updated_batch_dot_products) #apply softmax along row
         pooled_rep = torch.bmm(batch_soft_max, hidden_states) # pooled_rep = batch x 1 x encoding_dim --> one per x :)
 
@@ -89,6 +93,9 @@ class Find_Module(nn.Module):
         """
         padding_indexes = seqs == self.padding_idx
         padding_indexes = padding_indexes.float()
+        if self.cuda:
+            device = torch.device("cuda")
+            padding_indexes = padding_indexes.to(device)
         seq_embs = self.embeddings(seqs) # seq_embs = N x seq_len x hidden_dim
         seq_embs = self.embedding_dropout(seq_embs)
         hidden_states, _ =  self.bilstm(seq_embs) # hidden_states =  N x seq_len x 2*hidden_dim
@@ -111,24 +118,24 @@ class Find_Module(nn.Module):
         
         updated_hidden_states = torch.zeros(batch_size, seq_len+2,encoding_dim) 
         updated_hidden_states[:,1:seq_len+1,:] = hidden_states
-        updated_padding_indexes = torch.empty(batch_size, seq_len+2,encoding_dim).fill_(1.)
-        updated_padding_indexes[:,1:seq_len+1,:] = padding_indexes
+        updated_padding_indexes = torch.empty(batch_size, seq_len+2).fill_(1.)
+        updated_padding_indexes[:,1:seq_len+1] = padding_indexes
         if self.cuda:
             device = torch.device("cuda")
-            updated_hidden_states.to(device)
-            updated_padding_indexes.to(device)
+            updated_hidden_states = updated_hidden_states.to(device)
+            updated_padding_indexes = updated_padding_indexes.to(device)
 
         forward_bigram_hidden_states = torch.zeros(batch_size, seq_len, encoding_dim) #geting pooled hidden states for w_i, w_i+1
         backward_bigram_hidden_states = torch.zeros(batch_size, seq_len, encoding_dim) #geting pooled hidden states for w_i-1, w_i
         
         for i in range(batch_size):
             for j in range(1, seq_len+1):
-                bigram_hidden_states = hidden_states[i, j:j+2, :].unsqueeze(0)
-                bigram_padding_indexes = updated_padding_indexes[i, j:j+2, :].unsqueeze(0)
+                bigram_hidden_states = updated_hidden_states[i, j:j+2, :].unsqueeze(0)
+                bigram_padding_indexes = updated_padding_indexes[i, j:j+2].unsqueeze(0)
                 forward_bigram_hidden_states[i, j-1, :] = self.attention_pooling(bigram_hidden_states, bigram_padding_indexes).squeeze(0)
                 
-                bigram_hidden_states = hidden_states[i, j-1:j+1, :].unsqueeze(0)
-                bigram_padding_indexes = updated_padding_indexes[i, j-1:j+1, :].unsqueeze(0)
+                bigram_hidden_states = updated_hidden_states[i, j-1:j+1, :].unsqueeze(0)
+                bigram_padding_indexes = updated_padding_indexes[i, j-1:j+1].unsqueeze(0)
                 forward_bigram_hidden_states[i, j-1, :] = self.attention_pooling(bigram_hidden_states, bigram_padding_indexes).squeeze(0)
         
         return forward_bigram_hidden_states, backward_bigram_hidden_states
@@ -150,12 +157,12 @@ class Find_Module(nn.Module):
         
         updated_hidden_states = torch.zeros(batch_size, seq_len+4,encoding_dim) 
         updated_hidden_states[:,2:seq_len+2,:] = hidden_states
-        updated_padding_indexes = torch.empty(batch_size, seq_len+4,encoding_dim).fill_(1.)
-        updated_padding_indexes[:,2:seq_len+2,:] = padding_indexes
+        updated_padding_indexes = torch.empty(batch_size, seq_len+4).fill_(1.)
+        updated_padding_indexes[:,2:seq_len+2] = padding_indexes
         if self.cuda:
             device = torch.device("cuda")
-            updated_hidden_states.to(device)
-            updated_padding_indexes.to(device)
+            updated_hidden_states = updated_hidden_states.to(device)
+            updated_padding_indexes = updated_padding_indexes.to(device)
         
         forward_trigram_hidden_states = torch.zeros(batch_size, seq_len, encoding_dim) #geting pooled hidden states for w_i, w_i+1, w_i+2
         middle_trigram_hidden_states = torch.zeros(batch_size, seq_len, encoding_dim) #geting pooled hidden states for w_i-1, w_i, w_i+1
@@ -163,16 +170,16 @@ class Find_Module(nn.Module):
         
         for i in range(batch_size):
             for j in range(2, seq_len+2):
-                trigram_hidden_states = hidden_states[i, j:j+3, :].unsqueeze(0)
-                trigram_padding_indexes = updated_padding_indexes[i, j:j+3, :].unsqueeze(0)
+                trigram_hidden_states = updated_hidden_states[i, j:j+3, :].unsqueeze(0)
+                trigram_padding_indexes = updated_padding_indexes[i, j:j+3].unsqueeze(0)
                 forward_trigram_hidden_states[i, j-2, :] = self.attention_pooling(trigram_hidden_states, trigram_padding_indexes).squeeze(0)
                 
-                trigram_hidden_states = hidden_states[i, j-1:j+2, :].unsqueeze(0)
-                trigram_padding_indexes = updated_padding_indexes[i, j-1:j+2, :].unsqueeze(0)
+                trigram_hidden_states = updated_hidden_states[i, j-1:j+2, :].unsqueeze(0)
+                trigram_padding_indexes = updated_padding_indexes[i, j-1:j+2].unsqueeze(0)
                 middle_trigram_hidden_states[i, j-2, :] = self.attention_pooling(trigram_hidden_states, trigram_padding_indexes).squeeze(0)
 
-                trigram_hidden_states = hidden_states[i, j-2:j+1, :].unsqueeze(0)
-                trigram_padding_indexes = updated_padding_indexes[i, j-2:j+1, :].unsqueeze(0)
+                trigram_hidden_states = updated_hidden_states[i, j-2:j+1, :].unsqueeze(0)
+                trigram_padding_indexes = updated_padding_indexes[i, j-2:j+1].unsqueeze(0)
                 middle_trigram_hidden_states[i, j-2, :] = self.attention_pooling(trigram_hidden_states, trigram_padding_indexes).squeeze(0)
         
         return forward_trigram_hidden_states, middle_trigram_hidden_states, backward_trigram_hidden_states
@@ -241,9 +248,9 @@ class Find_Module(nn.Module):
 
             hs_cosine = self.compute_dot_product_between_token_rep_and_query_vectors(updated_hs,
                                                                                      normalized_query_vectors)
-            fwd_bigram_hs_cosine = self.compute_dot_product_between_token_rep_and_query_vectors(updated_forward_hs, 
+            fwd_bigram_hs_cosine = self.compute_dot_product_between_token_rep_and_query_vectors(updated_bigram_forward_hs, 
                                                                                                 normalized_query_vectors)
-            bwd_bigram_hs_cosine = self.compute_dot_product_between_token_rep_and_query_vectors(updated_backward_hs,
+            bwd_bigram_hs_cosine = self.compute_dot_product_between_token_rep_and_query_vectors(updated_bigram_backward_hs,
                                                                                                 normalized_query_vectors)	
             fwd_trigram_hs_cosine = self.compute_dot_product_between_token_rep_and_query_vectors(update_trigram_forward_hs, 
                                                                                                  normalized_query_vectors)
@@ -252,10 +259,10 @@ class Find_Module(nn.Module):
             bwd_trigram_hs_cosine = self.compute_dot_product_between_token_rep_and_query_vectors(update_trigram_backward_hs,
                                                                                                  normalized_query_vectors)	 
 
-            combined_cosines = torch.zeros(batch_size, seq_len, self.self.number_of_cosines) # building cosine similarity of sliding window
+            combined_cosines = torch.zeros(batch_size, seq_len, self.number_of_cosines) # building cosine similarity of sliding window
             combined_cosines[:,:,0] = hs_cosine
-            combined_cosines[:,:,1] = fwd_hs_cosine
-            combined_cosines[:,:,2] = bwd_hs_cosine
+            combined_cosines[:,:,1] = fwd_bigram_hs_cosine
+            combined_cosines[:,:,2] = bwd_bigram_hs_cosine
             combined_cosines[:,:,3] = fwd_trigram_hs_cosine
             combined_cosines[:,:,4] = mid_trigram_hs_cosine
             combined_cosines[:,:,5] = bwd_trigram_hs_cosine
@@ -264,7 +271,7 @@ class Find_Module(nn.Module):
                 device = torch.device("cuda")
                 combined_cosines = combined_cosines.to(device) # cobined_cosines = N x seq_len x sliding_win_size
             
-            similarity_scores = self.weight_linear_layer(hidden_states) # similarity_scores = N x seq_len x 1
+            similarity_scores = self.weight_linear_layer(combined_cosines) # similarity_scores = N x seq_len x 1
             # sliding_window_weights = self.weight_softmax(self.sliding_window_weight)
             # similarity_scores = torch.matmul(combined_cosines, sliding_window_weights) # similarity_scores = N x seq_len x 1
             
