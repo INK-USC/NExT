@@ -410,7 +410,7 @@ def evaluate_find_module(data_path, act_queries, query_labels, model, find_loss_
             string_loss = find_loss + gamma * sim_loss
             
             scores = token_scores.detach().cpu().numpy().flatten()
-            new_scores = [1 if score > 0.5  else 0 for score in scores]
+            new_scores = [1 if score > 0  else 0 for score in scores]
             f1_labels = labels.detach().cpu().numpy().flatten()
 
             total_loss = total_loss + string_loss.item()

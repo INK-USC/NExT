@@ -74,7 +74,7 @@ def main():
                         help="hidden vector size of lstm (really 2*hidden_dim, due to bilstm)")
     parser.add_argument('--embedding_dropout',
                         type=float,
-                        default=0.96,
+                        default=0.04,
                         help="embedding dropout")
     parser.add_argument('--model_save_dir',
                         type=str,
@@ -98,7 +98,7 @@ def main():
 
     torch.manual_seed(args.seed)
     random.seed(args.seed)
-    sample_rate = 0.67
+    sample_rate = 0.6
 
     if args.build_pre_train:
         build_pre_train_find_datasets_from_splits(args.train_path, args.dev_path, args.test_path,
@@ -145,14 +145,14 @@ def main():
         optimizer = Adagrad(model.parameters(), lr=args.learning_rate)   
 
     # define loss functions
-    find_loss_function  = nn.BCEWithLogitsLoss(torch.tensor([15.0]))
+    find_loss_function  = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([1.0]))
     sim_loss_function = similarity_loss_function
 
     # number of training epochs
     epochs = args.epochs
 
     epoch_losses = []
-    best_f1_score = float('inf')
+    best_f1_score = -1
     best_dev_loss = float('inf') 
 
     for epoch in range(args.start_epoch, args.start_epoch+epochs):
