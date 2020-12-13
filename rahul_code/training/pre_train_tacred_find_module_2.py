@@ -193,7 +193,7 @@ def main():
             string_loss.backward()
 
             # clip the the gradients to 1.0. It helps in preventing the exploding gradient problem
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0)
 
             # update parameters
             optimizer.step()

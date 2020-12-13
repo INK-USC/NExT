@@ -70,14 +70,11 @@ class Find_Module(nn.Module):
                 (torch.tensor) : N x 1 x encoding_dim
         """
         padding_scores = self.padding_score * padding_indexes # N x seq_len
-        # print(padding_scores.shape)
-        # print(hidden_states.shape)
         linear_transform = self.attention_matrix(hidden_states) # linear_transform = N x seq_len x encoding_dim
         tanh_tensor = torch.tanh(linear_transform) # element wise tanh
         batch_dot_products = torch.matmul(tanh_tensor, self.attention_vector) # batch_dot_product = batch x seq_len x 1
         updated_batch_dot_products = batch_dot_products + padding_scores.unsqueeze(2) # making sure score of padding_idx tokens is incredibly low
         updated_batch_dot_products = updated_batch_dot_products.permute(0,2,1) # batch x 1 x seq_len
-        # print(updated_batch_dot_products.shape)
         batch_soft_max = self.attn_softmax(updated_batch_dot_products) #apply softmax along row
         pooled_rep = torch.bmm(batch_soft_max, hidden_states) # pooled_rep = batch x 1 x encoding_dim --> one per x :)
 
@@ -136,13 +133,13 @@ class Find_Module(nn.Module):
                 
                 bigram_hidden_states = updated_hidden_states[i, j-1:j+1, :].unsqueeze(0)
                 bigram_padding_indexes = updated_padding_indexes[i, j-1:j+1].unsqueeze(0)
-                forward_bigram_hidden_states[i, j-1, :] = self.attention_pooling(bigram_hidden_states, bigram_padding_indexes).squeeze(0)
+                backward_bigram_hidden_states[i, j-1, :] = self.attention_pooling(bigram_hidden_states, bigram_padding_indexes).squeeze(0)
         
         return forward_bigram_hidden_states, backward_bigram_hidden_states
     
     def build_forward_backward_trigram_hidden_states(self, hidden_states, padding_indexes):
         """
-            Construct pooled representations for the bigrams surround a token w_i
+            Construct pooled representations for the trigrams surrounding a token w_i
 
             Arguments:
                 hidden_states   (torch.tensor) : N x seq_len x encoding_dim
@@ -180,7 +177,7 @@ class Find_Module(nn.Module):
 
                 trigram_hidden_states = updated_hidden_states[i, j-2:j+1, :].unsqueeze(0)
                 trigram_padding_indexes = updated_padding_indexes[i, j-2:j+1].unsqueeze(0)
-                middle_trigram_hidden_states[i, j-2, :] = self.attention_pooling(trigram_hidden_states, trigram_padding_indexes).squeeze(0)
+                backward_trigram_hidden_states[i, j-2, :] = self.attention_pooling(trigram_hidden_states, trigram_padding_indexes).squeeze(0)
         
         return forward_trigram_hidden_states, middle_trigram_hidden_states, backward_trigram_hidden_states
     
