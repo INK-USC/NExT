@@ -17,6 +17,25 @@ possible_embeddings = ['charngram.100d', 'fasttext.en.300d', 'fasttext.simple.30
 'glove.840B.300d', 'glove.twitter.27B.25d', 'glove.twitter.27B.50d', 'glove.twitter.27B.100d',
 'glove.twitter.27B.200d', 'glove.6B.50d', 'glove.6B.100d', 'glove.6B.200d', 'glove.6B.300d']
 
+def find_array_start_position(big_array, small_array):
+    start_position = -1
+    cur_position = 0
+    small_array_len = len(small_array)
+    for i, elem in enumerate(big_array):
+        if elem == small_array[cur_position]:
+            if cur_position == 0:
+                start_position = i
+            cur_position += 1
+        else:
+            cur_position = 0
+            start_position = -1
+        
+        if cur_position == small_array_len:
+            return start_position
+    
+    return -1
+
+
 def generate_save_string(embedding_name, random_state=-1, sample=-1.0):
     """
         To allow for multiple datasets to exist at once, we add this string to identify which dataset a run
@@ -186,14 +205,17 @@ def extract_queries_from_explanations(explanation):
     """
     possible_queries = re.findall('"[^"]+"', explanation)
     if len(possible_queries):
+        possible_queries = [query[1:len(query)-1] for query in possible_queries]
         return possible_queries
     
     possible_queries = re.findall("'[^']+'", explanation)
     if len(possible_queries):
+        possible_queries = [query[1:len(query)-1] for query in possible_queries]
         return possible_queries
 
     possible_queries = re.findall("`[^`]+`", explanation)
     if len(possible_queries):
+        possible_queries = [query[1:len(query)-1] for query in possible_queries]
         return possible_queries
 
     return []
@@ -225,7 +247,7 @@ def build_query_dataset(explanation_data, vocab, label_filter, save_string):
         if label_filter is None or label in label_filter:
             possible_queries = extract_queries_from_explanations(explanation)
             for query in possible_queries:
-                queries.append(query[1:len(query)-1])
+                queries.append(query)
                 labels.append(label)
     
     tokenized_queries = convert_text_to_tokens(queries, vocab, tokenize)
@@ -236,7 +258,6 @@ def build_query_dataset(explanation_data, vocab, label_filter, save_string):
 
     with open(file_name, "wb") as f:
         pickle.dump({"queries" : tokenized_queries, "labels" : labels}, f)
-
 
 def build_pre_train_find_datasets(file_path, explanation_path, embedding_name="glove.840B.300d",
                                   random_state=42, label_filter=None, sample_rate=0.1):
@@ -338,6 +359,72 @@ def build_pre_train_find_datasets_from_splits(train_path, dev_path, test_path, e
     with open(explanation_path) as f:
         explanation_data = json.load(f)
 
+    build_query_dataset(explanation_data, vocab, label_filter, save_string)
+
+def build_pre_train_find_datasets_ziqi(train_path, explanation_path, embedding_name="glove.840B.300d", label_filter=None, train_count=40000, test_count=2000):
+    """
+        Following Conversations with Ziqi, prepping data in a new way
+
+        Arguments:
+            train_path       (str) : path to training split of data
+            explanation_path (str) : path to explanation data
+            embedding_name   (str) : name of pre-trained embeddings being used in vocab
+            label_filter     (arr) : labels to consider when extracting queries from explanations
+                                     (allows user to ignore explanations associated with certain labels)
+            train_count      (int) : how much of the train data should be used for training
+            test_count       (int) : how much of the train data should be used for eval
+    """
+
+    with open(train_path) as f:
+        train = json.load(f)
+    
+    eval_data = train[:test_count]
+
+    train_data = train[test_count:test_count+train_count]
+    
+    # abusing sample a bit, but it will work
+    save_string = generate_save_string(embedding_name, sample="ziqi")
+
+    vocab = build_vocab(train, embedding_name, save_string)
+    
+    build_variable_length_text_dataset(train_data, vocab, "train", save_string)
+
+    build_variable_length_text_dataset(eval_data, vocab, "ziqi_test_1", save_string)
+
+    with open(explanation_path) as f:
+        explanation_data = json.load(f)
+    
+    sentences = []
+    queries = []
+    for entry in explanation_data:
+        sentence = entry["sent"]
+        explanation = entry["explanation"]
+        label = entry["label"]
+        if label_filter is None or label in label_filter:
+            possible_queries = extract_queries_from_explanations(explanation)
+            for query in possible_queries:
+                queries.append(query)
+                sentences.append(sentence)
+    
+    tokenized_sentences = convert_text_to_tokens(sentences, vocab, tokenize)
+    tokenized_queries = convert_text_to_tokens(queries, vocab, tokenize)
+    labels = []
+    for i, tokenized_sentence in enumerate(tokenized_sentences):
+        tokenized_sentences[i] = [vocab["<bos>"]] + tokenized_sentence + [vocab["<eos>"]]
+        padded_tokenized_sentence = tokenized_sentences[i]
+        tokenized_query = tokenized_queries[i]
+        sent_labels = [0] * len(padded_tokenized_sentence)
+        start_position = find_array_start_position(padded_tokenized_sentence, tokenized_query)
+        sent_labels[start_position:start_position+len(tokenized_query)] = [1] * len(tokenized_query)
+        labels.append(sent_labels)
+    
+    eval_dataset_2 = PreTrainingFindModuleDataset(tokenized_sentences, tokenized_queries, labels, vocab["<pad>"])
+
+    file_name = "../data/pre_train_data/{}_data_{}.p".format("ziqi_test_2", save_string)
+
+    with open(file_name, "wb") as f:
+        pickle.dump(eval_dataset_2, f)
+    
     build_query_dataset(explanation_data, vocab, label_filter, save_string)
 
 def similarity_loss_function(pos_scores, neg_scores):

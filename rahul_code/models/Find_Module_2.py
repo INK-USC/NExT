@@ -7,7 +7,7 @@ class Find_Module(nn.Module):
         Find Module per the NExT paper's description
     """
     def __init__(self, emb_weight, padding_idx, emb_dim, hidden_dim, cuda,
-                 n_layers=2, embedding_dropout=0.2, encoding_dropout=0.5, sliding_win_size=3,
+                 n_layers=2, embedding_dropout=0.04, encoding_dropout=0.5, sliding_win_size=3,
                  padding_score=-1*1e30):
         """
             Arguments:
@@ -53,11 +53,7 @@ class Find_Module(nn.Module):
         diagonal_vector = diagonal_vector.squeeze(1)
         self.feature_weight_matrix = nn.Parameter(torch.diag(input=diagonal_vector), requires_grad=True)
 
-        # self.weight_linear_layer = nn.Linear(self.number_of_cosines, 1)
-        temp_sliding_window_weight = torch.zeros(self.number_of_cosines, 1)
-        nn.init.xavier_uniform_(temp_sliding_window_weight)
-        self.sliding_window_weight = nn.Parameter(temp_sliding_window_weight, requires_grad=True)
-        self.weight_softmax = nn.Softmax(dim=0)
+        self.weight_linear_layer = nn.Linear(self.number_of_cosines, 1)
     
     
     def attention_pooling(self, hidden_states, padding_indexes):
@@ -268,9 +264,7 @@ class Find_Module(nn.Module):
                 device = torch.device("cuda")
                 combined_cosines = combined_cosines.to(device) # cobined_cosines = N x seq_len x sliding_win_size
             
-            # similarity_scores = self.weight_linear_layer(combined_cosines) # similarity_scores = N x seq_len x 1
-            sliding_window_weights = self.weight_softmax(self.sliding_window_weight)
-            similarity_scores = torch.matmul(combined_cosines, sliding_window_weights) # similarity_scores = N x seq_len x 1
+            similarity_scores = self.weight_linear_layer(combined_cosines) # similarity_scores = N x seq_len x 1
             
             return similarity_scores
         
