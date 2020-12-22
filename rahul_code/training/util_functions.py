@@ -156,7 +156,7 @@ def build_pretraining_triples(data, vocab, tokenize_fn):
         num_tokens = random.randint(1, min(len(token_seq), 5))
         starting_position = random.randint(0, len(token_seq)-num_tokens)
         end_position = starting_position + num_tokens
-        queries.append([vocab["<bos>"]] + token_seq[starting_position:end_position] + [vocab["<eos>"])
+        queries.append([vocab["<bos>"]] + token_seq[starting_position:end_position] + [vocab["<eos>"]])
         token_seqs[i] = [vocab["<bos>"]] + token_seq + [vocab["<eos>"]]
         label_seq = [0.0]
         for i in range(len(token_seq)):
@@ -381,6 +381,8 @@ def build_pre_train_find_datasets_ziqi(train_path, explanation_path, embedding_n
     eval_data = train[:test_count]
 
     train_data = train[test_count:test_count+train_count]
+
+    train_sample = random.sample(train_data, int(len(train_data)*0.1))
     
     # abusing sample a bit, but it will work
     save_string = generate_save_string(embedding_name, sample="ziqi")
@@ -390,6 +392,8 @@ def build_pre_train_find_datasets_ziqi(train_path, explanation_path, embedding_n
     build_variable_length_text_dataset(train_data, vocab, "train", save_string)
 
     build_variable_length_text_dataset(eval_data, vocab, "ziqi_test_1", save_string)
+
+    build_variable_length_text_dataset(train_sample, vocab, "train_test", save_string)
 
     with open(explanation_path) as f:
         explanation_data = json.load(f)

@@ -109,6 +109,7 @@ def main():
         train_dataset = pickle.load(f)
     
     dev_path = "../data/pre_train_data/ziqi_test_2_data_{}.p".format(save_string)
+    train_eval_path = "../data/pre_train_data/train_test_{}.p".format(save_string)
     
     with open("../data/pre_train_data/vocab_{}.p".format(save_string), "rb") as f:
         vocab = pickle.load(f)
@@ -150,7 +151,9 @@ def main():
     epochs = args.epochs
 
     epoch_losses = []
+    train_epoch_losses = []
     best_f1_score = -1
+    best_train_f1_score = -1
     best_dev_loss = float('inf') 
 
     for epoch in range(args.start_epoch, args.start_epoch+epochs):
@@ -203,7 +206,9 @@ def main():
 
 
         print("Starting Evaluation")
-        eval_results = evaluate_find_module(dev_path, real_query_tokens, sim_data["labels"], model, find_loss_function, sim_loss_function, args.eval_batch_size, args.gamma)
+        eval_results = evaluate_find_module(dev_path, real_query_tokens, sim_data["labels"],
+                                            model, find_loss_function, sim_loss_function,
+                                            args.eval_batch_size, args.gamma)
         dev_avg_loss, dev_avg_find_loss, dev_avg_sim_loss, dev_f1_score, total_og_scores, total_new_scores = eval_results
         print("Finished Evaluation")
         
@@ -221,9 +226,26 @@ def main():
             best_f1_score = dev_f1_score
             best_dev_loss = dev_avg_loss
 
-        epoch_losses.append((train_avg_loss, train_avg_find_loss, train_avg_sim_loss, dev_avg_loss, dev_avg_find_loss, dev_avg_sim_loss, dev_f1_score))
+        epoch_losses.append((train_avg_loss, train_avg_find_loss, train_avg_sim_loss,
+                             dev_avg_loss, dev_avg_find_loss, dev_avg_sim_loss, dev_f1_score))
+        print("Best Dev F1: {}".format(str(best_f1_score)))
+        print(epoch_losses[-3:])
 
-        print(epoch_losses)
+        print("Starting Train Evaluation")
+        eval_results = evaluate_find_module(train_eval_path, real_query_tokens, sim_data["labels"],
+                                            model, find_loss_function, sim_loss_function,
+                                            args.eval_batch_size, args.gamma)
+        train_eval_avg_loss, train_eval_avg_find_loss, train_eval_avg_sim_loss, train_eval_f1_score, total_og_scores, total_new_scores = eval_results
+        print("Finished Evaluation")
+
+        if train_eval_f1_score > best_train_f1_score:
+            best_train_f1_score = train_eval_f1_score
+        
+        train_epoch_losses.append((train_avg_loss, train_avg_find_loss, train_avg_sim_loss,
+                                   train_eval_avg_loss, train_eval_avg_find_loss, train_eval_avg_sim_loss,
+                                   train_eval_f1_score))
+        print("Best Train F1: {}".format(str(best_train_f1_score)))
+        print(train_epoch_losses[-3:])
 
     epoch_string = str(epochs)
     with open("../data/result_data/loss_per_epoch_Find-Module-pt_{}.csv".format(args.experiment_name), "w") as f:
