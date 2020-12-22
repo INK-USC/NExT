@@ -156,7 +156,7 @@ def build_pretraining_triples(data, vocab, tokenize_fn):
         num_tokens = random.randint(1, min(len(token_seq), 5))
         starting_position = random.randint(0, len(token_seq)-num_tokens)
         end_position = starting_position + num_tokens
-        queries.append(token_seq[starting_position:end_position])
+        queries.append([vocab["<bos>"]] + token_seq[starting_position:end_position] + [vocab["<eos>"])
         token_seqs[i] = [vocab["<bos>"]] + token_seq + [vocab["<eos>"]]
         label_seq = [0.0]
         for i in range(len(token_seq)):
@@ -416,6 +416,7 @@ def build_pre_train_find_datasets_ziqi(train_path, explanation_path, embedding_n
         sent_labels = [0] * len(padded_tokenized_sentence)
         start_position = find_array_start_position(padded_tokenized_sentence, tokenized_query)
         sent_labels[start_position:start_position+len(tokenized_query)] = [1] * len(tokenized_query)
+        tokenized_queries[i] = [vocab["<bos>"]] + tokenized_query + [vocab["<eos>"]]
         labels.append(sent_labels)
     
     eval_dataset_2 = PreTrainingFindModuleDataset(tokenized_sentences, tokenized_queries, labels, vocab["<pad>"])
