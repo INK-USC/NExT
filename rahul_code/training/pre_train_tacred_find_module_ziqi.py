@@ -128,7 +128,7 @@ def main():
                                       hidden_dim=args.hidden_dim, cuda=torch.cuda.is_available())
     
     if args.load_model:
-        model.load_state_dict(torch.load("../data/saved_models/Find-Module-pt_{}.pt".format(args.experiment_name)))
+        model.load_state_dict(torch.load("../data/saved_models/Find-Module-pt_{}.p".format(args.experiment_name)))
         print("loaded model")
     
     del vocab
@@ -218,7 +218,7 @@ def main():
                 dir_name = args.model_save_dir
             else:
                 dir_name = "../data/saved_models/"
-            torch.save(model.state_dict(), "{}Find-Module-pt_{}.pt".format(dir_name, args.experiment_name))
+            torch.save(model.state_dict(), "{}Find-Module-pt_{}.p".format(dir_name, args.experiment_name))
             with open("../data/result_data/best_dev_total_og_scores_{}.p".format(args.experiment_name), "wb") as f:
                 pickle.dump(total_og_scores, f)
             with open("../data/result_data/best_dev_total_new_scores_{}.p".format(args.experiment_name), "wb") as f:
@@ -240,9 +240,12 @@ def main():
 
         if train_eval_f1_score > best_train_f1_score:
             best_train_f1_score = train_eval_f1_score
+            with open("../data/result_data/best_train_eval_total_og_scores_{}.p".format(args.experiment_name), "wb") as f:
+                pickle.dump(total_og_scores, f)
+            with open("../data/result_data/best_train_eval_total_new_scores_{}.p".format(args.experiment_name), "wb") as f:
+                pickle.dump(total_new_scores, f)
         
-        train_epoch_losses.append((train_avg_loss, train_avg_find_loss, train_avg_sim_loss,
-                                   train_eval_avg_loss, train_eval_avg_find_loss, train_eval_avg_sim_loss,
+        train_epoch_losses.append((train_eval_avg_loss, train_eval_avg_find_loss, train_eval_avg_sim_loss,
                                    train_eval_f1_score))
         print("Best Train F1: {}".format(str(best_train_f1_score)))
         print(train_epoch_losses[-3:])
@@ -252,6 +255,12 @@ def main():
         writer=csv.writer(f)
         writer.writerow(['train_loss','train_find_loss', 'train_sim_loss', 'dev_loss', 'dev_find_loss', 'dev_sim_loss', 'dev_f1_score'])
         for row in epoch_losses:
+            writer.writerow(row)
+    
+    with open("../data/result_data/train_eval_loss_per_epoch_Find-Module-pt_{}.csv".format(args.experiment_name), "w") as f:
+        writer=csv.writer(f)
+        writer.writerow(["train_eval_avg_loss", "train_eval_avg_find_loss", "train_eval_avg_sim_loss", "train_eval_f1_score"])
+        for row in train_epoch_losses:
             writer.writerow(row)
 
 if __name__ == "__main__":
