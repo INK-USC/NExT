@@ -9,7 +9,7 @@ class Find_Module(nn.Module):
     """
         Find Module per the NExT paper's description
     """
-    def __init__(self, encoding_dim, cuda, freeze_model, encoding_dropout, padding_score=-1*1e30, compression_dim=512):
+    def __init__(self, encoding_dim, cuda, freeze_model, encoding_dropout, padding_score=-1*1e30, compression_dim=600):
         """
             Arguments:
                 encoding_dim        (int) : final encoding dimension for a vector representation of a token
@@ -62,7 +62,8 @@ class Find_Module(nn.Module):
         diagonal_vector_2 = diagonal_vector_2.squeeze(1)
         self.feature_weight_matrix_cosine = nn.Parameter(torch.diag(input=diagonal_vector_2), requires_grad=True)
 
-        self.linear_transform = nn.Linear(self.encoding_dim, self.encoding_dim)
+        self.pooled_project_up = nn.Linear(self.encoding_dim, self.compression_dim)
+        self.pooled_project_down = nn.Linear(self.compression_dim, self.encoding_dim)
     
     def attention_pooling(self, hidden_states, padding_indexes):
         """
@@ -102,7 +103,8 @@ class Find_Module(nn.Module):
     def create_encodings(self, input_ids, input_mask):
         hidden_states = self.encode_tokens(input_ids, input_mask)
         compressed_hidden_states = self.compression_matrix_1(hidden_states)
-        updated_hidden_states = torch.matmul(compressed_hidden_states, self.feature_weight_matrix)
+        normalized_hidden_states = f.normalize(compressed_hidden_states, p=2, dim=2)
+        updated_hidden_states = torch.matmul(normalized_hidden_states, self.feature_weight_matrix)
         non_linear_hidden_states = self.relu(updated_hidden_states)
         final_hidden_states = self.compression_matrix_2(non_linear_hidden_states)
 
@@ -138,17 +140,18 @@ class Find_Module(nn.Module):
         seq_encodings = self.create_encodings(seq_token_ids, seq_attn_mask) # N x seq_len x encoding_dim
         pooled_query_encodings = self.create_pooled_encodings(query_token_ids, query_attn_mask) # N x 1 x encoding_dim
         
-        shifted_pooled_encodings = self.linear_transform(pooled_query_encodings)
-        non_linear_pooled_encodings = self.relu(shifted_pooled_encodings)
+        large_pooled_encodings = self.pooled_project_up(pooled_query_encodings) # N x 1 x compression_dim
+        non_linear_pooled_encodings = self.relu(large_pooled_encodings)
+        small_pooled_encodings = self.pooled_project_down(non_linear_pooled_encodings) # N x 1 x encoding_dim
+        
+        normalized_seq_encodings = f.normalize(seq_encodings, p=2, dim=2)
+        normalized_pooled_encodings = f.normalize(small_pooled_encodings, p=2, dim=2)
 
-        updated_seq_encodings = torch.matmul(seq_encodings, self.feature_weight_matrix_cosine)
-        updated_query_encodings = torch.matmul(shifted_pooled_encodings, self.feature_weight_matrix_cosine)
+        updated_seq_encodings = torch.matmul(normalized_seq_encodings, self.feature_weight_matrix_cosine) # N x seq_len x encoding_dim
+        updated_query_encodings = torch.matmul(normalized_pooled_encodings, self.feature_weight_matrix_cosine) # N x 1 x encoding_dim
 
-        normalized_seq_encodings = f.normalize(updated_seq_encodings, p=2, dim=2) # normalizing rows of each matrix in the batch
-        normalized_query_encodings = f.normalize(updated_query_encodings, p=2, dim=2) # normalizing the columns
+        updated_query_encodings = updated_query_encodings.permute(0, 2, 1) # N x encoding_dim x 1
 
-        normalized_query_encodings = normalized_query_encodings.permute(0, 2, 1) # N x encoding_dim x 1
-
-        seq_similarities = torch.matmul(normalized_seq_encodings, normalized_query_encodings).squeeze(2) # N x seq_len
+        seq_similarities = torch.matmul(updated_seq_encodings, updated_query_encodings).squeeze(2) # N x seq_len
 
         return seq_similarities
