@@ -60,7 +60,7 @@ def main():
                         help="weight of sim_loss")
     parser.add_argument('--encoding_dim',
                         type=int,
-                        default=200,
+                        default=300,
                         help="embedding vector size")
     parser.add_argument('--encoding_dropout',
                         type=float,
@@ -154,12 +154,13 @@ def main():
 
             # get model predictions for the current batch
             token_scores = model.find_forward(seq, seq_mask, query, query_mask)
-            anchor_vectors = model.create_pooled_encodings(sim_data["anchor_queries"],
-                                                           sim_data["anchor_query_masks"]).squeeze(1)
-            positive_vectors = model.create_pooled_encodings(sim_data["positive_queries"],
-                                                             sim_data["positive_query_masks"]).squeeze(1)
-            negative_vectors = model.create_pooled_encodings(sim_data["negative_queries"],
-                                                             sim_data["negative_query_masks"]).squeeze(1)
+            anchor_vectors = model.get_normalized_pooled_encodings(sim_data["anchor_queries"],
+                                                                   sim_data["anchor_query_masks"]).squeeze(1)
+            positive_vectors = model.get_normalized_pooled_encodings(sim_data["positive_queries"],
+                                                                     sim_data["positive_query_masks"]).squeeze(1)
+            negative_vectors = model.get_normalized_pooled_encodings(sim_data["negative_queries"],
+                                                                     sim_data["negative_query_masks"]).squeeze(1)
+
 
             # compute the loss between actual and predicted values
             find_loss = find_loss_function(token_scores, labels)
@@ -172,7 +173,7 @@ def main():
             total_loss = total_loss + string_loss.item()
             batch_count += 1
 
-            if batch_count % 100 == 0 and batch_count > 0:
+            if batch_count % 300 == 0 and batch_count > 0:
                 print((find_total_loss, sim_total_loss, total_loss, batch_count))
 
             # backward pass to calculate the gradients

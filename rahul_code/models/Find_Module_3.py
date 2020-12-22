@@ -55,10 +55,14 @@ class Find_Module(nn.Module):
         self.attention_vector = nn.Parameter(temp_att_vector, requires_grad=True)
         self.attn_softmax = nn.Softmax(dim=2)
 
+        self.pooled_linear_transform = nn.Linear(self.encoding_dim, self.encoding_dim)
+
         diagonal_vector_2 = torch.zeros(self.encoding_dim, 1)
         nn.init.xavier_uniform_(diagonal_vector_2)
         diagonal_vector_2 = diagonal_vector_2.squeeze(1)
         self.feature_weight_matrix_cosine = nn.Parameter(torch.diag(input=diagonal_vector_2), requires_grad=True)
+
+        self.linear_transform = nn.Linear(self.encoding_dim, self.encoding_dim)
     
     def attention_pooling(self, hidden_states, padding_indexes):
         """
@@ -112,6 +116,12 @@ class Find_Module(nn.Module):
             padding_indexes = padding_indexes.to(device)
         pooled_encodings = self.attention_pooling(hidden_states, padding_indexes)
         return pooled_encodings
+    
+    def get_normalized_pooled_encodings(self, input_ids, input_mask):
+        pooled_encodings = self.create_pooled_encodings(input_ids, input_mask)
+        normalized_encodings = f.normalize(pooled_encodings, p=2, dim=2)
+
+        return normalized_encodings
         
     def find_forward(self, seq_token_ids, seq_attn_mask, query_token_ids, query_attn_mask):
         """
@@ -128,8 +138,11 @@ class Find_Module(nn.Module):
         seq_encodings = self.create_encodings(seq_token_ids, seq_attn_mask) # N x seq_len x encoding_dim
         pooled_query_encodings = self.create_pooled_encodings(query_token_ids, query_attn_mask) # N x 1 x encoding_dim
         
+        shifted_pooled_encodings = self.linear_transform(pooled_query_encodings)
+        non_linear_pooled_encodings = self.relu(shifted_pooled_encodings)
+
         updated_seq_encodings = torch.matmul(seq_encodings, self.feature_weight_matrix_cosine)
-        updated_query_encodings = torch.matmul(pooled_query_encodings, self.feature_weight_matrix_cosine)
+        updated_query_encodings = torch.matmul(shifted_pooled_encodings, self.feature_weight_matrix_cosine)
 
         normalized_seq_encodings = f.normalize(updated_seq_encodings, p=2, dim=2) # normalizing rows of each matrix in the batch
         normalized_query_encodings = f.normalize(updated_query_encodings, p=2, dim=2) # normalizing the columns
