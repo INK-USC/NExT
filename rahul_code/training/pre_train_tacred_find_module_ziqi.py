@@ -127,9 +127,39 @@ def main():
     model = Find_Module_2.Find_Module(emb_weight=vocab.vectors, padding_idx=pad_idx, emb_dim=args.emb_dim,
                                       hidden_dim=args.hidden_dim, cuda=torch.cuda.is_available())
     
+    # number of training epochs
+    epochs = args.epochs
+    epoch_string = str(epochs)
+    
     if args.load_model:
         model.load_state_dict(torch.load("../data/saved_models/Find-Module-pt_{}.p".format(args.experiment_name)))
         print("loaded model")
+
+        epoch_losses = []
+        train_epoch_losses = []
+        best_f1_score = -1
+        best_train_f1_score = -1
+        best_dev_loss = float('inf') 
+
+        with open("../data/result_data/loss_per_epoch_Find-Module-pt_{}.csv".format(args.experiment_name)) as f:
+            reader=csv.reader(f)
+            next(reader)
+            for row in reader:
+                epoch_losses.append(row)
+                if row[-1] > best_f1_score:
+                    best_f1_score = row[-1]
+                if row[3] < best_dev_loss:
+                    best_dev_loss = row[3]
+        
+        with open("../data/result_data/train_eval_loss_per_epoch_Find-Module-pt_{}.csv".format(args.experiment_name)) as f:
+            reader=csv.reader(f)
+            next(reader)
+            for row in reader:
+                train_epoch_losses.append(row)
+                if row[-1] > best_f1_score:
+                    best_f1_score = row[-1]
+        
+        print("loaded past results")
     
     del vocab
     model = model.to(device)
@@ -144,17 +174,15 @@ def main():
         optimizer = Adagrad(model.parameters(), lr=args.learning_rate)   
 
     # define loss functions
-    find_loss_function  = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([1.0]).to(device))
+    find_loss_function  = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([10.0]).to(device))
     sim_loss_function = similarity_loss_function
 
-    # number of training epochs
-    epochs = args.epochs
-
-    epoch_losses = []
-    train_epoch_losses = []
-    best_f1_score = -1
-    best_train_f1_score = -1
-    best_dev_loss = float('inf') 
+    if not args.load_model:
+        epoch_losses = []
+        train_epoch_losses = []
+        best_f1_score = -1
+        best_train_f1_score = -1
+        best_dev_loss = float('inf') 
 
     for epoch in range(args.start_epoch, args.start_epoch+epochs):
         print('\n Epoch {:} / {:}'.format(epoch + 1, args.start_epoch+epochs))
@@ -250,7 +278,6 @@ def main():
         print("Best Train F1: {}".format(str(best_train_f1_score)))
         print(train_epoch_losses[-3:])
 
-    epoch_string = str(epochs)
     with open("../data/result_data/loss_per_epoch_Find-Module-pt_{}.csv".format(args.experiment_name), "w") as f:
         writer=csv.writer(f)
         writer.writerow(['train_loss','train_find_loss', 'train_sim_loss', 'dev_loss', 'dev_find_loss', 'dev_sim_loss', 'dev_f1_score'])

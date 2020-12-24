@@ -87,7 +87,8 @@ def build_vocab(train, embedding_name, save_string="", save=True):
         Returns:
             torchtext.vocab : vocab object
     """
-    text_field = Field(tokenize=tokenize, init_token = '<bos>', eos_token='<eos>')
+    # text_field = Field(tokenize=tokenize, init_token = '<bos>', eos_token='<eos>')
+    text_field = Field(tokenize=tokenize)
     fields = [("text", text_field)]
     train_examples = []
     for text in train:
@@ -156,15 +157,17 @@ def build_pretraining_triples(data, vocab, tokenize_fn):
         num_tokens = random.randint(1, min(len(token_seq), 5))
         starting_position = random.randint(0, len(token_seq)-num_tokens)
         end_position = starting_position + num_tokens
-        queries.append([vocab["<bos>"]] + token_seq[starting_position:end_position] + [vocab["<eos>"]])
-        token_seqs[i] = [vocab["<bos>"]] + token_seq + [vocab["<eos>"]]
-        label_seq = [0.0]
+        queries.append(token_seq[starting_position:end_position])
+        # queries.append([vocab["<bos>"]] + token_seq[starting_position:end_position] + [vocab["<eos>"]])
+        # token_seqs[i] = [vocab["<bos>"]] + token_seq + [vocab["<eos>"]]
+        # label_seq = [0.0]
+        label_seq = []
         for i in range(len(token_seq)):
             if i >= starting_position and i < end_position:
                 label_seq.append(1.0)
             else:
                 label_seq.append(0.0)
-        label_seq.append(0.0)
+        # label_seq.append(0.0)
         labels.append(label_seq)
     
     return token_seqs, queries, labels
@@ -249,8 +252,11 @@ def build_query_dataset(explanation_data, vocab, label_filter, save_string):
             for query in possible_queries:
                 queries.append(query)
                 labels.append(label)
-    
+
     tokenized_queries = convert_text_to_tokens(queries, vocab, tokenize)
+
+    # for i, query in enumerate(tokenized_queries):
+    #     tokenized_queries[i] == [vocab["<bos>"]] + query + [vocab["<eos>"]]
 
     print("Finished tokenizing actual queries, count: {}".format(str(len(tokenized_queries))))
 
@@ -414,13 +420,15 @@ def build_pre_train_find_datasets_ziqi(train_path, explanation_path, embedding_n
     tokenized_queries = convert_text_to_tokens(queries, vocab, tokenize)
     labels = []
     for i, tokenized_sentence in enumerate(tokenized_sentences):
-        tokenized_sentences[i] = [vocab["<bos>"]] + tokenized_sentence + [vocab["<eos>"]]
-        padded_tokenized_sentence = tokenized_sentences[i]
+        # tokenized_sentences[i] = [vocab["<bos>"]] + tokenized_sentence + [vocab["<eos>"]]
+        # padded_tokenized_sentence = tokenized_sentences[i]
         tokenized_query = tokenized_queries[i]
-        sent_labels = [0] * len(padded_tokenized_sentence)
-        start_position = find_array_start_position(padded_tokenized_sentence, tokenized_query)
+        # sent_labels = [0] * len(padded_tokenized_sentence)
+        sent_labels = [0] * len(tokenized_sentence)
+        # start_position = find_array_start_position(padded_tokenized_sentence, tokenized_query)
+        start_position = find_array_start_position(tokenized_sentence, tokenized_query)
         sent_labels[start_position:start_position+len(tokenized_query)] = [1] * len(tokenized_query)
-        tokenized_queries[i] = [vocab["<bos>"]] + tokenized_query + [vocab["<eos>"]]
+        # tokenized_queries[i] = [vocab["<bos>"]] + tokenized_query + [vocab["<eos>"]]
         labels.append(sent_labels)
     
     eval_dataset_2 = PreTrainingFindModuleDataset(tokenized_sentences, tokenized_queries, labels, vocab["<pad>"])
