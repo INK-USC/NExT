@@ -227,108 +227,146 @@ def FIND_module(sent,pats,word_mat,config,is_train,rnn,scope='Find_module'):#sen
         pat_len = tf.reduce_sum(tf.cast(pat_mask, tf.int32), axis=1)
 
         with tf.variable_scope('embedding'):
-            sent_emb = tf.nn.embedding_lookup(word_mat, sent)
-            sent_emb_d = dropout(sent_emb, keep_prob=config.word_keep_prob, is_train=is_train, mode="embedding")
-            pat_emb = tf.nn.embedding_lookup(word_mat, pats)
-            pat_emb_d = dropout(pat_emb, keep_prob=config.word_keep_prob, is_train=is_train,mode='embedding')
+            sent_emb = tf.nn.embedding_lookup(word_mat, sent) # Rahul: convert sentence tokens into vectors
+
+            # sent_emb_d = dropout(sent_emb, keep_prob=config.word_keep_prob, is_train=is_train, mode="embedding") # ***** Rahul-Q: NOT NEEDED ? ***** (doesn't seem to be used)
+            
+            pat_emb = tf.nn.embedding_lookup(word_mat, pats)  # Rahul: convert pattern tokens into vectors
+
+            # pat_emb_d = dropout(pat_emb, keep_prob=config.word_keep_prob, is_train=is_train,mode='embedding') # ***** Rahul-Q: NOT NEEDED ? ***** (doesn't seem to be used)
 
         with tf.variable_scope('stack'):
             pad = tf.zeros([batch_size,1,dim],tf.float32)
 
-            sent_emb_pad = tf.concat([pad,sent_emb,pad],axis=1)
-            sent_emb_stack_2 = tf.reshape(sent_emb_pad,[batch_size,maxlength_sent+2,1,dim])
-            sent_emb_stack_2 = tf.concat([sent_emb_stack_2[:,0:-1,:],sent_emb_stack_2[:,1:,:]],axis=2)
-            sent_emb_stack_2 = tf.reshape(sent_emb_stack_2,[batch_size*(maxlength_sent+1),2,dim])
+            sent_emb_pad = tf.concat([pad,sent_emb,pad],axis=1) # Rahul: adding padding to each sentence
+            sent_emb_stack_2 = tf.reshape(sent_emb_pad,[batch_size,maxlength_sent+2,1,dim]) # Rahul: reshapping padded sentences to (batch_size, max_sentence_length+2, 1, embedding_dim)
+            sent_emb_stack_2 = tf.concat([sent_emb_stack_2[:,0:-1,:],sent_emb_stack_2[:,1:,:]],axis=2) # Rahul: slicing original vector embeddings and creating bigrams
+            sent_emb_stack_2 = tf.reshape(sent_emb_stack_2,[batch_size*(maxlength_sent+1),2,dim]) # Rahul: stacking bigrams into (batch_size *(maxlength_sent+1), 2, embedding_dim)
 
-            sent_emb_pad2 = tf.concat([pad,pad,sent_emb,pad,pad],axis=1)
+            sent_emb_pad2 = tf.concat([pad,pad,sent_emb,pad,pad],axis=1) # Rahul: similar actions here for trigrams
             sent_emb_stack_3 = tf.reshape(sent_emb_pad2,[batch_size,maxlength_sent+4,1,dim])
             sent_emb_stack_3 = tf.concat([sent_emb_stack_3[:, 0:-2, :], sent_emb_stack_3[:, 1:-1, :], sent_emb_stack_3[:, 2:, :]], axis=2)
             sent_emb_stack_3 = tf.reshape(sent_emb_stack_3,[batch_size*(maxlength_sent+2),3,dim])
 
-            sent_emb_stack_1 = tf.reshape(sent_emb,[batch_size*maxlength_sent,1,dim])
+            sent_emb_stack_1 = tf.reshape(sent_emb,[batch_size*maxlength_sent,1,dim]) # Rahul: similar actions here for unigrams
 
-        with tf.variable_scope('stack_d'):
-            pad = tf.zeros([batch_size,1,dim],tf.float32)
+        # # ***** Rahul: NOT NEEDED ? *****
+        # with tf.variable_scope('stack_d'):
+        #     pad = tf.zeros([batch_size,1,dim],tf.float32)
 
-            sent_emb_pad_d = tf.concat([pad,sent_emb_d,pad],axis=1)
-            sent_emb_stack_2_d = tf.reshape(sent_emb_pad_d,[batch_size,maxlength_sent+2,1,dim])
-            sent_emb_stack_2_d = tf.concat([sent_emb_stack_2_d[:,0:-1,:],sent_emb_stack_2_d[:,1:,:]],axis=2)
-            sent_emb_stack_2_d = tf.reshape(sent_emb_stack_2_d,[batch_size*(maxlength_sent+1),2,dim])
+        #     sent_emb_pad_d = tf.concat([pad,sent_emb_d,pad],axis=1)
+        #     sent_emb_stack_2_d = tf.reshape(sent_emb_pad_d,[batch_size,maxlength_sent+2,1,dim])
+        #     sent_emb_stack_2_d = tf.concat([sent_emb_stack_2_d[:,0:-1,:],sent_emb_stack_2_d[:,1:,:]],axis=2)
+        #     sent_emb_stack_2_d = tf.reshape(sent_emb_stack_2_d,[batch_size*(maxlength_sent+1),2,dim])
 
-            sent_emb_pad2_d = tf.concat([pad,pad,sent_emb_d,pad,pad],axis=1)
-            sent_emb_stack_3_d = tf.reshape(sent_emb_pad2_d,[batch_size,maxlength_sent+4,1,dim])
-            sent_emb_stack_3_d = tf.concat([sent_emb_stack_3_d[:, 0:-2, :], sent_emb_stack_3_d[:, 1:-1, :], sent_emb_stack_3_d[:, 2:, :]], axis=2)
-            sent_emb_stack_3_d = tf.reshape(sent_emb_stack_3_d,[batch_size*(maxlength_sent+2),3,dim])
+        #     sent_emb_pad2_d = tf.concat([pad,pad,sent_emb_d,pad,pad],axis=1)
+        #     sent_emb_stack_3_d = tf.reshape(sent_emb_pad2_d,[batch_size,maxlength_sent+4,1,dim])
+        #     sent_emb_stack_3_d = tf.concat([sent_emb_stack_3_d[:, 0:-2, :], sent_emb_stack_3_d[:, 1:-1, :], sent_emb_stack_3_d[:, 2:, :]], axis=2)
+        #     sent_emb_stack_3_d = tf.reshape(sent_emb_stack_3_d,[batch_size*(maxlength_sent+2),3,dim])
 
-            sent_emb_stack_1_d = tf.reshape(sent_emb_d,[batch_size*maxlength_sent,1,dim])
+        #     sent_emb_stack_1_d = tf.reshape(sent_emb_d,[batch_size*maxlength_sent,1,dim])
+        # ***** Rahul-Q: NOT NEEDED ? *****
 
         with tf.variable_scope("encoder"):
             with tf.variable_scope('encode_pat'):
-                pat, _ = rnn(pat_emb, seq_len=pat_len, concat_layers=False)       #[numpats,d]
-                pat_d = dropout(pat, keep_prob=config.keep_prob, is_train=is_train)
+                pat, _ = rnn(pat_emb, seq_len=pat_len, concat_layers=False)       #[numpats,d] <- Rahul-Q: isn't this [numpats, pat_len, encoding_dim]?
+                                                                                  # Rahul-Q: also what does concat_layers=False do?, does this mean encoding_dim = 100 and not 200?
+
+                pat_d = dropout(pat, keep_prob=config.keep_prob, is_train=is_train) # Rahul: dropout applied to encoding
             with tf.variable_scope('encode_sent'):
-                cont_stack_3, _ = rnn(sent_emb_stack_3,seq_len=3 * tf.ones([batch_size * (maxlength_sent + 2)], tf.int32),concat_layers=False)
-                cont_stack_2, _ = rnn(sent_emb_stack_2, seq_len=2*tf.ones([batch_size*(maxlength_sent+1)],tf.int32), concat_layers=False)  #[batch_size*(maxlength_sent+1),d]
+                cont_stack_3, _ = rnn(sent_emb_stack_3,seq_len=3 * tf.ones([batch_size * (maxlength_sent + 2)], tf.int32),concat_layers=False) # Rahul: encoding trigrams
+                                                                                                                                               # Rahul-Q: Again what does concat_layers=False do?
+                
+                cont_stack_2, _ = rnn(sent_emb_stack_2, seq_len=2*tf.ones([batch_size*(maxlength_sent+1)],tf.int32), concat_layers=False) #[batch_size*(maxlength_sent+1),d]
+                                                                                                                                          # Rahul: encoding bigrams
+                                                                                                                                          # Rahul-Q: Again what does concat_layers=False do?
+                
                 cont_stack_1, _ = rnn(sent_emb_stack_1, seq_len=tf.ones([batch_size*maxlength_sent],tf.int32), concat_layers=False)  #[batch_size*maxlength_sent,d]
-                cont_stack_3_d = dropout(cont_stack_3, keep_prob=keep_prob, is_train=is_train)
-                cont_stack_2_d = dropout(cont_stack_2, keep_prob=keep_prob, is_train=is_train)
-                cont_stack_1_d = dropout(cont_stack_1, keep_prob=keep_prob, is_train=is_train)
+                                                                                                                                     # Rahul: encoding unigrams
+                                                                                                                                     # Rahul-Q: Again what does concat_layers=False do?
+                                                                                                                    
+                cont_stack_3_d = dropout(cont_stack_3, keep_prob=keep_prob, is_train=is_train) # Rahul: apply dropout to trigrams
+
+                cont_stack_2_d = dropout(cont_stack_2, keep_prob=keep_prob, is_train=is_train) # Rahul: apply dropout to bigrams
+
+                cont_stack_1_d = dropout(cont_stack_1, keep_prob=keep_prob, is_train=is_train) # Rahul: apply dropout to unigrams
 
         with tf.variable_scope('attention'):
-            pat_d_a = attention(pat_d,config.att_hidden, mask=pat_mask)
-            cont_stack_2_d_a = attention(cont_stack_2_d,config.att_hidden)
-            cont_stack_3_d_a = attention(cont_stack_3_d,config.att_hidden)
+            pat_d_a = attention(pat_d,config.att_hidden, mask=pat_mask) # Rahul: Getting attention weights of LSTM output of each pattern
 
-            cont_stack_3_att = tf.reduce_sum(tf.expand_dims(cont_stack_3_d_a, axis=2) * cont_stack_3, axis=1)
-            cont_stack_2_att = tf.reduce_sum(tf.expand_dims(cont_stack_2_d_a, axis=2) * cont_stack_2, axis=1)
-            pat_d_att = tf.reduce_sum(tf.expand_dims(pat_d_a, axis=2) * pat_d, axis=1)
-            pat_att = tf.reduce_sum(tf.expand_dims(pat_d_a, axis=2) * pat, axis=1)
-            cont_stack_1_att = tf.squeeze(cont_stack_1)
-        with tf.variable_scope('emb_attention'):
-            pat_emb_d_a = attention(pat_emb_d, config.att_hidden, mask=pat_mask)
-            pat_emb_d_att = tf.reduce_sum(tf.expand_dims(pat_emb_d_a, axis=2) * pat_emb_d, axis=1)
-            pat_emb_att = tf.reduce_sum(tf.expand_dims(pat_emb_d_a, axis=2) * pat_emb, axis=1)
+            cont_stack_2_d_a = attention(cont_stack_2_d,config.att_hidden) # Rahul: Getting attention weights of LSTM output of each bigram
 
-            sent_emb_stack_3_d_a = attention(sent_emb_stack_3_d, config.att_hidden)
-            sent_emb_stack_3_att = tf.reduce_sum(tf.expand_dims(sent_emb_stack_3_d_a, axis=2) * sent_emb_stack_3, axis=1)
+            cont_stack_3_d_a = attention(cont_stack_3_d,config.att_hidden) # Rahul: Getting attention weights of LSTM output of each trigram
 
-            sent_emb_stack_2_d_a = attention(sent_emb_stack_2_d, config.att_hidden)
-            sent_emb_stack_2_att = tf.reduce_sum(tf.expand_dims(sent_emb_stack_2_d_a, axis=2) * sent_emb_stack_2, axis=1)
+            cont_stack_3_att = tf.reduce_sum(tf.expand_dims(cont_stack_3_d_a, axis=2) * cont_stack_3, axis=1) # Rahul: Constructing weighted representation of each trigram using attention weights
+                                                                                                              # Rahul-Q: You're using cont_stack_3, which is the vectors before dropout,
+                                                                                                              #          however to get the weights you used vectors after dropout is this what you intended?
+            
+            cont_stack_2_att = tf.reduce_sum(tf.expand_dims(cont_stack_2_d_a, axis=2) * cont_stack_2, axis=1) # Rahul: Constructing weighted representation of each bigram using attention weights
+                                                                                                              # Rahul-Q: You're using cont_stack_2, which is the vectors before dropout,
+                                                                                                              #          however to get the weights you used vectors after dropout is this what you intended?
+            
+            pat_d_att = tf.reduce_sum(tf.expand_dims(pat_d_a, axis=2) * pat_d, axis=1) # Rahul: Constructing weighted representation of each pattern using attention weights
+                                                                                       # Rahul-Q: You're using pat_d, which is the vectors after dropout, this is different than the
+                                                                                       #          above strategy, is this what you intended?
+                                                                                       # Rahul-Q: Below you also create another attention representation of a pattern, is this what you intended?
+            
+            pat_att = tf.reduce_sum(tf.expand_dims(pat_d_a, axis=2) * pat, axis=1) # Rahul-Q: Look at comment above, confusion around which attention representation of a pattern to use
+            
+            cont_stack_1_att = tf.squeeze(cont_stack_1) # Rahul: unigram representation requires no attention
+        
+        # ***** Rahul-Q: NOT NEEDED ? *****
+        # with tf.variable_scope('emb_attention'):
+        #     pat_emb_d_a = attention(pat_emb_d, config.att_hidden, mask=pat_mask)
+        #     pat_emb_d_att = tf.reduce_sum(tf.expand_dims(pat_emb_d_a, axis=2) * pat_emb_d, axis=1)
+        #     pat_emb_att = tf.reduce_sum(tf.expand_dims(pat_emb_d_a, axis=2) * pat_emb, axis=1)
 
-            sent_emb_stack_1_att = tf.squeeze(sent_emb_stack_1)
+        #     sent_emb_stack_3_d_a = attention(sent_emb_stack_3_d, config.att_hidden)
+        #     sent_emb_stack_3_att = tf.reduce_sum(tf.expand_dims(sent_emb_stack_3_d_a, axis=2) * sent_emb_stack_3, axis=1)
+
+        #     sent_emb_stack_2_d_a = attention(sent_emb_stack_2_d, config.att_hidden)
+        #     sent_emb_stack_2_att = tf.reduce_sum(tf.expand_dims(sent_emb_stack_2_d_a, axis=2) * sent_emb_stack_2, axis=1)
+
+        #     sent_emb_stack_1_att = tf.squeeze(sent_emb_stack_1)
+         # ***** Rahul-Q: NOT NEEDED ? *****
 
         with tf.variable_scope('Score'):
-            scores_stack_2 = cosine(cont_stack_2_att,pat_d_att,weighted=False)
-            scores_stack_1 = cosine(cont_stack_1_att,pat_d_att,weighted=False)
-            scores_stack_3 = cosine(cont_stack_3_att, pat_d_att, weighted=False)
+            scores_stack_2 = cosine(cont_stack_2_att,pat_d_att,weighted=False) # Rahul: cosine similarity of bigram representations and pat_d_att representation
+            scores_stack_1 = cosine(cont_stack_1_att,pat_d_att,weighted=False) # Rahul: cosine similarity of unigram representations and pat_d_att representation
+            scores_stack_3 = cosine(cont_stack_3_att, pat_d_att, weighted=False) # Rahul: cosine similarity of trigram representations and pat_d_att representation
 
-            scores_stack_3 = tf.reshape(scores_stack_3, [batch_size, 1, maxlength_sent + 2, num_pats])
-            scores_stack_2 = tf.reshape(scores_stack_2,[batch_size,1,maxlength_sent+1,num_pats])
-            scores_stack_1 = tf.reshape(scores_stack_1,[batch_size,1,maxlength_sent,num_pats])
-            scores_sim = cosine(pat_att, pat_d_att, weighted=False)
-
+            scores_stack_3 = tf.reshape(scores_stack_3, [batch_size, 1, maxlength_sent + 2, num_pats]) # Rahul: reshaping of trigram scores
+            scores_stack_2 = tf.reshape(scores_stack_2,[batch_size,1,maxlength_sent+1,num_pats]) # Rahul: reshaping of bigram scores
+            scores_stack_1 = tf.reshape(scores_stack_1,[batch_size,1,maxlength_sent,num_pats]) # Rahul: reshaping of bigram scores
+            scores_sim = cosine(pat_att, pat_d_att, weighted=False) # Rahul-Q: What is this? You're taking the cosine similarity between the attention representation of a pattern
+                                                                    # with dropout, and attention representation of a pattern without dropout, not sure what this cosine represents.
+                                                                    # It seems like this is being used for L_sim, but I don't see how this cosine value represents the needed
+                                                                    # calculations for L_sim; Lsim = max q1∈Q+ {(τ − cos(zqD, zq1D))^2} + max q2∈Q− {cos(zqD, zq2D)^2}
+        
         with tf.variable_scope('emb_Score'):
-            scores_stack_3_emb = cosine(sent_emb_stack_3_att,pat_emb_d_att)
-            scores_stack_2_emb = cosine(sent_emb_stack_2_att,pat_emb_d_att)
-            scores_stack_1_emb = cosine(sent_emb_stack_1_att,pat_emb_d_att)
+            # scores_stack_3_emb = cosine(sent_emb_stack_3_att,pat_emb_d_att) # ***** Rahul-Q: NOT NEEDED ? *****
+            # scores_stack_2_emb = cosine(sent_emb_stack_2_att,pat_emb_d_att) # ***** Rahul-Q: NOT NEEDED ? *****
+            # scores_stack_1_emb = cosine(sent_emb_stack_1_att,pat_emb_d_att) # ***** Rahul-Q: NOT NEEDED ? *****
 
-            scores_stack_3_emb = tf.reshape(scores_stack_3_emb, [batch_size, 1, maxlength_sent + 2, num_pats])
-            scores_stack_2_emb = tf.reshape(scores_stack_2_emb,[batch_size,1,maxlength_sent+1,num_pats])
-            scores_stack_1_emb = tf.reshape(scores_stack_1_emb,[batch_size,1,maxlength_sent,num_pats])
+            # scores_stack_3_emb = tf.reshape(scores_stack_3_emb, [batch_size, 1, maxlength_sent + 2, num_pats]) # ***** Rahul-Q: NOT NEEDED ? *****
+            # scores_stack_2_emb = tf.reshape(scores_stack_2_emb,[batch_size,1,maxlength_sent+1,num_pats]) # ***** Rahul-Q: NOT NEEDED ? *****
+            # scores_stack_1_emb = tf.reshape(scores_stack_1_emb,[batch_size,1,maxlength_sent,num_pats]) # ***** Rahul-Q: NOT NEEDED ? *****
 
-            phi = 0
-            scores_stack_3 = phi * scores_stack_3_emb + (1 - phi) * scores_stack_3
-            scores_stack_2 = phi*scores_stack_2_emb+(1-phi)*scores_stack_2
-            scores_stack_1 = phi*scores_stack_1_emb+(1-phi)*scores_stack_1
+            # phi = 0 # ***** Rahul-Q: NOT NEEDED ? *****
+            # scores_stack_3 = phi * scores_stack_3_emb + (1 - phi) * scores_stack_3 # ***** Rahul-Q: NOT NEEDED ? *****
+            # scores_stack_2 = phi*scores_stack_2_emb+(1-phi)*scores_stack_2 # ***** Rahul-Q: NOT NEEDED ? *****
+            # scores_stack_1 = phi*scores_stack_1_emb+(1-phi)*scores_stack_1 # ***** Rahul-Q: NOT NEEDED ? *****
 
+            # Rahul: Reshaping scores to then finally be combined by Linear layer to get weighted similarity score later
             scores = tf.concat([scores_stack_3[:,:,0:-2,:],scores_stack_3[:,:,1:-1,:],scores_stack_3[:,:,2:,:],scores_stack_2[:,:,0:-1,:],scores_stack_2[:,:,1:,:],scores_stack_1],axis=1)
             scores = tf.reshape(scores,[batch_size,6,maxlength_sent,num_pats])
             scores = tf.transpose(scores,[0,3,1,2])
             scores = tf.reshape(scores,[batch_size*num_pats,6,maxlength_sent])
 
-            scores_sim_emb = cosine(pat_emb_att, pat_emb_d_att)
-            scores_sim = phi*scores_sim_emb+(1-phi)*scores_sim
+            # scores_sim_emb = cosine(pat_emb_att, pat_emb_d_att) # ***** Rahul-Q: NOT NEEDED ? *****
+            # scores_sim = phi*scores_sim_emb+(1-phi)*scores_sim # ***** Rahul-Q: NOT NEEDED ? *****
 
+        # Rahul-Q: I'm not really sure what this piece of code is doing, if you could write some comments here that would be amazing :)
         with tf.variable_scope('SeqLabel'):
             seq = tf.layers.dense(tf.transpose(scores,[0,2,1]),1)
             seq = tf.squeeze(seq)
@@ -338,44 +376,3 @@ def FIND_module(sent,pats,word_mat,config,is_train,rnn,scope='Find_module'):#sen
             seq = seq*tf.tile(tf.cast(tf.reshape(sent_mask,[batch_size,maxlength_sent,1]),tf.float32),[1,1,num_pats])
 
         return seq,scores_sim
-
-# def FIND_module(sent,pats,word_mat,config,is_train,scope='Find_module'):
-#     with tf.variable_scope(scope):
-#         keep_prob = config.keep_prob
-#         d = config.hidden
-#         batch_size = tf.shape(sent)[0]
-#         maxlength_sent = tf.shape(sent)[1]
-#         dim = tf.shape(word_mat)[1]
-#         num_pats = tf.shape(pats)[0]
-#
-#         sent_mask = tf.cast(sent, tf.bool)
-#
-#         pat_mask = tf.cast(pats, tf.bool)
-#         pat_len = tf.reduce_sum(tf.cast(pat_mask, tf.int32), axis=1)
-#         pats_size = pats.get_shape()[0]
-#
-#         with tf.variable_scope('embedding'):
-#             sent_emb = tf.nn.embedding_lookup(word_mat, sent)
-#             sent_emb = dropout(sent_emb, keep_prob=config.word_keep_prob, is_train=is_train, mode="embedding")
-#             pat_emb = tf.nn.embedding_lookup(word_mat, pats)
-#             pat_emb_d = dropout(pat_emb, keep_prob=config.keep_prob, is_train=is_train)
-#
-#         with tf.variable_scope('CNN_range_3'):
-#             pad = tf.zeros([pats_size,1,config.glove_dim],tf.float32)
-#             pat_emb_d = tf.concat([pad,pat_emb_d,pad],axis=1)
-#             pat_emb_d = tf.reshape(pat_emb_d,[pats_size,10+2,config.glove_dim,1])
-#             filt_size = 200
-#             pat = tf.layers.conv2d(inputs=pat_emb_d, filters=filt_size, kernel_size=[3, config.glove_dim],
-#                              padding='valid',
-#                              kernel_initializer=tf.contrib.layers.xavier_initializer_conv2d(),
-#                              name="conv3", reuse=tf.AUTO_REUSE)
-#             pat = tf.squeeze(tf.reduce_max(pat,axis=1))
-#
-#
-#             pad = tf.zeros([batch_size,1,config.glove_dim],tf.float32)
-#
-#             sent_range_3 = tf.layers.conv2d(inputs=tf.reshape(tf.concat([pad,sent_emb,pad],axis=1), filters=filt_size, kernel_size=[3, config.glove_dim],
-#                              padding='valid',
-#                              kernel_initializer=tf.contrib.layers.xavier_initializer_conv2d(),
-#                              name="conv3", reuse=tf.AUTO_REUSE)
-#             sent_range_3 = tf.squeeze(sent_range_3)
