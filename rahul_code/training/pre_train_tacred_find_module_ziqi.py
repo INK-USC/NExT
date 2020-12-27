@@ -6,7 +6,7 @@ sys.path.append(".")
 sys.path.append("../")
 from util_functions import build_pre_train_find_datasets_ziqi, similarity_loss_function, evaluate_find_module, generate_save_string
 from util_classes import PreTrainingFindModuleDataset
-from models import Find_Module_2
+from models import Find_Module_4
 import pickle
 from tqdm import tqdm
 import torch.nn as nn
@@ -124,7 +124,7 @@ def main():
     else:
         device = torch.device("cpu")
 
-    model = Find_Module_2.Find_Module(emb_weight=vocab.vectors, padding_idx=pad_idx, emb_dim=args.emb_dim,
+    model = Find_Module_4.Find_Module(emb_weight=vocab.vectors, padding_idx=pad_idx, emb_dim=args.emb_dim,
                                       hidden_dim=args.hidden_dim, cuda=torch.cuda.is_available())
     
     # number of training epochs
@@ -174,7 +174,7 @@ def main():
         optimizer = Adagrad(model.parameters(), lr=args.learning_rate)   
 
     # define loss functions
-    find_loss_function  = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([10.0]).to(device))
+    find_loss_function  = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([1.0]).to(device))
     sim_loss_function = similarity_loss_function
 
     if not args.load_model:
