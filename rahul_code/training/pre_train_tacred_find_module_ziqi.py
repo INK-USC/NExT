@@ -146,18 +146,18 @@ def main():
             next(reader)
             for row in reader:
                 epoch_losses.append(row)
-                if row[-1] > best_f1_score:
-                    best_f1_score = row[-1]
-                if row[3] < best_dev_loss:
-                    best_dev_loss = row[3]
+                if float(row[-1]) > best_f1_score:
+                    best_f1_score = float(row[-1])
+                if float(row[3]) < best_dev_loss:
+                    best_dev_loss = float(row[3])
         
         with open("../data/result_data/train_eval_loss_per_epoch_Find-Module-pt_{}.csv".format(args.experiment_name)) as f:
             reader=csv.reader(f)
             next(reader)
             for row in reader:
                 train_epoch_losses.append(row)
-                if row[-1] > best_f1_score:
-                    best_f1_score = row[-1]
+                if float(row[-1]) > best_f1_score:
+                    best_f1_score = float(row[-1])
         
         print("loaded past results")
     
