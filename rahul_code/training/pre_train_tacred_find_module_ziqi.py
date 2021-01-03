@@ -164,8 +164,30 @@ def main():
     del vocab
     model = model.to(device)
 
+    # Get L_sim Data ready
     real_query_tokens = PreTrainingFindModuleDataset.variable_length_batch_as_tensors(sim_data["queries"], pad_idx)
     real_query_tokens = real_query_tokens.to(device)
+    query_labels = sim_data["labels"]
+    queries_by_label = {}
+    for i, label in enumerate(query_labels):
+        if label in queries_by_label:
+            queries_by_label[label][i] = 1.0
+        else:
+            queries_by_label[label] = [0.0] * len(query_labels)
+            queries_by_label[label][i] = 1.0
+    
+    query_index_matrix = []
+    for i, label in enumerate(query_labels):
+        query_index_matrix.append(queries_by_label[label])
+        query_index_matrix[i][i] = 0.0
+    
+    query_index_matrix = torch.tensor(query_index_matrix)
+    neg_query_index_matrix = 1.0 - query_index_matrix
+    zeroes = torch.zeros((len(query_labels), len(query_labels)))
+
+    query_index_matrix = query_index_matrix.to(device)
+    neg_query_index_matrix = neg_query_index_matrix.to(device)
+    zeroes = zeroes.to(device)
 
     # define the optimizer
     if args.use_adam:
@@ -202,7 +224,7 @@ def main():
 
             # get model predictions for the current batch
             token_scores = model.find_forward(tokens, queries)
-            pos_scores, neg_scores = model.sim_forward(real_query_tokens, sim_data["labels"])
+            pos_scores, neg_scores = model.sim_forward(real_query_tokens, query_index_matrix, neg_query_index_matrix, zeroes)
 
             # compute the loss between actual and predicted values
             find_loss = find_loss_function(token_scores, labels)
