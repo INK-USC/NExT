@@ -176,16 +176,11 @@ class Find_Module(nn.Module):
                 fwd_pooled_reps, bwd_pooled_reps : both are N x seq_len x encoding_dim
         """
         batch_size, seq_len, embedding_dim = seq_embs.shape
-
-        padding = torch.zeros(batch_size, 1, embedding_dim)
-        padding_i = torch.ones(batch_size, 1)
-        if self.cuda:
-            device = torch.device("cuda")
-            padding = padding.to(device)
-            padding_i = padding_i.to(device)
-
-        padded_embeddings = torch.cat((padding, seq_embs, padding), 1)
-        padded_padding_indexes = torch.cat((padding_i, padding_indexes, padding_i), 1)
+  
+        padded_embeddings = torch.full((batch_size, seq_len+2, embedding_dim), self.padding_idx) 
+        padded_embeddings[:,1:seq_len+1,:] = seq_embs
+        padded_padding_indexes = torch.full((batch_size, seq_len+2), 1.0)
+        padded_padding_indexes[:,1:seq_len+1] = padding_indexes
 
         new_batch_size = batch_size * seq_len
         new_seq_len = 2
@@ -246,15 +241,10 @@ class Find_Module(nn.Module):
         """
         batch_size, seq_len, embedding_dim = seq_embs.shape
   
-        padding = torch.zeros(batch_size, 2, embedding_dim)
-        padding_i = torch.ones(batch_size, 2)
-        if self.cuda:
-            device = torch.device("cuda")
-            padding = padding.to(device)
-            padding_i = padding_i.to(device)
-        
-        padded_embeddings = torch.cat((padding, seq_embs, padding), 1)
-        padded_padding_indexes = torch.cat((padding_i, padding_indexes, padding_i), 1)
+        padded_embeddings = torch.full((batch_size, seq_len+4, embedding_dim), self.padding_idx) 
+        padded_embeddings[:,2:seq_len+2,:] = seq_embs
+        padded_padding_indexes = torch.full((batch_size, seq_len+4), 1.0)
+        padded_padding_indexes[:,2:seq_len+2] = padding_indexes
 
         new_batch_size = batch_size * seq_len
         new_seq_len = 3
@@ -433,42 +423,92 @@ class Find_Module(nn.Module):
         seq_similarities = self.pre_train_get_similarity(seq_embeddings, seq_padding_indexes, pooled_query_encodings).squeeze(2) # N x seq_len
 
         return seq_similarities
-
-    def sim_forward(self, queries, query_index_matrix, neg_query_index_matrix, zeroes, tau=0.9):
+    
+    def compute_sim_query(self, query_vector, pos_tensor, neg_tensor, tau=0.9):
         """
-            Forward function for computing L_sim when pre-training Find Module
-
+            Given a query vector, the set of all query vectors that are of the same class, and the set of all
+            query vectors of a different class, compute the min similarity between the query vector and 
+            query vectors of the same class and the max similarity between the query vector and query vectors
+            of a different class.
             Remember if distance between two vectors are small, then cosine between those vectors is close to
             1. So by taking max of cosines, you're actually finding min distance between vectors. Hence, why
             tau is introduced when computing max distance between a query and queries of the same class.
+            Arguments:
+                query_vector (torch.tensor) : 1 x encoding_dim
+                pos_tensor   (torch.tensor) : pos_count x encoding_dim, all query vectors of the same class
+                neg_tensor   (torch.tensor) : neg_count x encoding_dim, all query vectors of different classes
+                tau                 (float) : constant used in NExT paper
+            
+            Returns:
+                pos_score, neg_score : float representing max distance score for queries of the same class,
+                                       and min distance score for queries of a different class
+        """
+        # updated_query_vector = torch.matmul(query_vector, self.feature_weight_matrix) # 1 x encoding_dim
+        # updated_pos_tensor = torch.matmul(pos_tensor, self.feature_weight_matrix) # pos_count x encoding_dim
+        # updated_neg_tensor = torch.matmul(neg_tensor, self.feature_weight_matrix) # neg_count x encoding_dim
+        
+        normalized_query_vector = f.normalize(query_vector, p=2, dim=1).permute(1,0) # encoding_dim x 1
+        normalized_pos_tensor = f.normalize(pos_tensor, p=2, dim=1)
+        normalized_neg_tensor = f.normalize(neg_tensor, p=2, dim=1)
 
+        pos_scores = tau - torch.matmul(normalized_pos_tensor, normalized_query_vector).squeeze(1) # pos_count 
+        neg_scores = torch.matmul(normalized_neg_tensor, normalized_query_vector).squeeze(1) # neg_count
+
+        pos_score = torch.max(pos_scores**2)
+        neg_score = torch.max(neg_scores**2)
+
+        return pos_score, neg_score
+
+    def sim_forward(self, queries, labels):
+        """
+            Forward function for computing L_sim when pre-training Find Module
             Arguments:
                 queries (torch.tensor) : N x seq_len, token sequences each query
                 labels           (arr) : corresponding label for each query
-                tau            (float) : constant used in NExT paper
             
             Returns:
                 pos_scores, neg_scores : per query the maximum distance score between the query and queires
                                          of the same class, per query the minimum distance score between the
-                                         query and queires of the same class
+                                         query and queires of the same class	                         
         """
-        query_embeddings, query_padding_indexes = self.get_embeddings(queries) # N x q_len x embedding_dim, N x q_len
-        query_encodings = self.get_hidden_states(query_embeddings) # N x q_len x encoding_dim
-        query_encodings_d = self.encoding_dropout(query_encodings) # N x q_len x encoding_dim
+        queries_by_label = {}
+        
+        query_encodings, query_padding_indexes = self.encode_tokens(queries) # N x seq_len x encoding_dim
+        
+        if self.cuda:
+            device = torch.device("cuda")
+            query_padding_indexes = query_padding_indexes.to(device)
+        
+        pooled_reps = self.attention_pooling(query_encodings, query_padding_indexes).squeeze(1) # N x encoding_dim
+        
+        for i, label in enumerate(labels):
+            if label in queries_by_label:
+                queries_by_label[label][i] = pooled_reps[i]
+            else:
+                queries_by_label[label] = {i : pooled_reps[i]}
+        
+        pos_scores = torch.zeros(len(labels))
+        neg_scores = torch.zeros(len(labels))
 
-        query_attention_weights = self.get_attention_weights(query_encodings_d, query_padding_indexes) # N x 1 x q_len
-        pooled_query = torch.bmm(query_attention_weights, query_encodings) # N x 1 x encoding_dim
-        pooled_query_d = torch.bmm(query_attention_weights, query_encodings_d) # N x 1 x encoding_dim
-
-        pooled_query = f.normalize(pooled_query, p=2, dim=2).squeeze(1) # N x encoding_dim
-        pooled_query_d = f.normalize(pooled_query_d, p=2, dim=2).squeeze(1).permute(1,0) # encoding_dim x N
-
-        query_similarities = torch.mm(pooled_query, pooled_query_d) # N x N
-
-        query_pos_similarities = torch.maximum(tau - query_similarities, zeroes)
-        query_neg_similarities = torch.maximum(query_similarities, zeroes)
-
-        pos_scores = torch.max(query_pos_similarities**2 - 1e30*neg_query_index_matrix, axis=1).values
-        neg_scores = torch.max(query_neg_similarities**2 - 1e30*query_index_matrix, axis=1).values
+        for i, label in enumerate(labels):
+            query_rep = pooled_reps[i].unsqueeze(0)
+            pos_tensor_array = [queries_by_label[label][j] for j in list(queries_by_label[label].keys()) if j != i]
+            neg_tensor_array = []
+            for label_2 in queries_by_label:
+                if label_2 != label:
+                    for key in queries_by_label[label]:
+                        neg_tensor_array.append(queries_by_label[label][key])
+            
+            if len(pos_tensor_array) and len(neg_tensor_array):
+                pos_tensor = torch.stack(pos_tensor_array) # pos_count x encoding_dim
+                neg_tensor = torch.stack(neg_tensor_array) # neg_count x encoding_dim
+                pos_score, neg_score = self.compute_sim_query(query_rep, pos_tensor, neg_tensor)
+                pos_scores[i] = pos_score
+                neg_scores[i] = neg_score
+        
+        if self.cuda:
+            device = torch.device("cuda")
+            pos_scores = pos_scores.to(device)
+            neg_scores = neg_scores.to(device)
 
         return pos_scores, neg_scores
