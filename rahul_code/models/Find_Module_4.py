@@ -41,9 +41,10 @@ class Find_Module(nn.Module):
         self.encoding_dropout = nn.Dropout(p=encoding_dropout)
                 
         self.attention_matrix = nn.Linear(self.encoding_dim, self.encoding_dim)
-        temp_att_vector = torch.zeros(self.encoding_dim, 1)
-        nn.init.xavier_uniform_(temp_att_vector)
-        self.attention_vector = nn.Parameter(temp_att_vector, requires_grad=True)
+        # temp_att_vector = torch.zeros(self.encoding_dim, 1)
+        # nn.init.xavier_uniform_(temp_att_vector)
+        # self.attention_vector = nn.Parameter(temp_att_vector, requires_grad=True)
+        self.attention_vector = nn.Linear(self.encoding_dim, 1, bias=False)
         self.attn_softmax = nn.Softmax(dim=2)
 
         # diagonal_vector = torch.zeros(self.encoding_dim, 1)
@@ -53,13 +54,15 @@ class Find_Module(nn.Module):
 
         self.weight_linear_layer = nn.Linear(self.number_of_cosines, 1)
     
-    def get_attention_weights(self, hidden_states, padding_indexes):
-        padding_scores = self.padding_score * padding_indexes # N x seq_len
+    def get_attention_weights(self, hidden_states, padding_indexes=None):
         linear_transform = self.attention_matrix(hidden_states) # linear_transform = N x seq_len x encoding_dim
         tanh_tensor = torch.tanh(linear_transform) # element wise tanh
-        batch_dot_products = torch.matmul(tanh_tensor, self.attention_vector) # batch_dot_product = batch x seq_len x 1
-        updated_batch_dot_products = batch_dot_products + padding_scores.unsqueeze(2) # making sure score of padding_idx tokens is incredibly low
-        updated_batch_dot_products = updated_batch_dot_products.permute(0,2,1) # batch x 1 x seq_len
+        batch_dot_products = self.attention_vector(tanh_tensor) # batch_dot_product = batch x seq_len x 1
+        # batch_dot_products = torch.matmul(tanh_tensor, self.attention_vector) # batch_dot_product = batch x seq_len x 1
+        if padding_indexes != None:
+            padding_scores = self.padding_score * padding_indexes # N x seq_len
+            batch_dot_products = batch_dot_products + padding_scores.unsqueeze(2) # making sure score of padding_idx tokens is incredibly low
+        updated_batch_dot_products = batch_dot_products.permute(0,2,1) # batch x 1 x seq_len
         batch_soft_max = self.attn_softmax(updated_batch_dot_products) #apply softmax along row
 
         return batch_soft_max
@@ -141,7 +144,7 @@ class Find_Module(nn.Module):
                 (torch.tensor) : N x seq_len x 1, cosine similarity between each token's representation
                                     and the query vector
         """
-        normalized_token_rep = f.normalize(token_rep, p=2, dim=2) # normalizing rows of each matrix in the batch
+        normalized_token_rep = f.normalize(token_rep + + 1e-5, p=2, dim=2) # normalizing rows of each matrix in the batch
         cosine_sim = torch.matmul(normalized_token_rep, normalized_query_vectors) # N x seq_len x 1
         
         return cosine_sim
@@ -191,25 +194,25 @@ class Find_Module(nn.Module):
         new_seq_len = 2
 
         padding = torch.zeros(batch_size, 1, embedding_dim) # batch_size x 1 x embedding_dim
-        padding_i = torch.ones(batch_size, 1) # batch_size x 1
+        # padding_i = torch.ones(batch_size, 1) # batch_size x 1
         if self.cuda:
             device = torch.device("cuda")
             padding = padding.to(device)
-            padding_i = padding_i.to(device)
+            # padding_i = padding_i.to(device)
 
         padded_embeddings = torch.cat((padding, seq_embs, padding), 1).unsqueeze(2) # batch_size x seq_len+2 x 1 x embedding_dim
         bigrams = torch.cat((padded_embeddings[:,0:-1,:], padded_embeddings[:,1:,:]), 2) # batch_size x seq_len+1 x 2 x embedding_dim
         needed_size = (new_batch_size, new_seq_len, embedding_dim) 
         bigrams = torch.reshape(bigrams, needed_size) # batch_size * (seq_len+1) x 2 x embedding_dim
 
-        padded_padding_indexes = torch.cat((padding_i, padding_indexes, padding_i), 1).unsqueeze(2) # batch_size x seq_len+2 x 1
-        bigram_paddings = torch.cat((padded_padding_indexes[:,0:-1,:], padded_padding_indexes[:,1:,:]), 2) # batch_size x seq_len+1 x 2
-        needed_size = (new_batch_size, new_seq_len)
-        bigram_paddings = torch.reshape(bigram_paddings, needed_size) # batch_size * (seq_len+1) x 2
+        # padded_padding_indexes = torch.cat((padding_i, padding_indexes, padding_i), 1).unsqueeze(2) # batch_size x seq_len+2 x 1
+        # bigram_paddings = torch.cat((padded_padding_indexes[:,0:-1,:], padded_padding_indexes[:,1:,:]), 2) # batch_size x seq_len+1 x 2
+        # needed_size = (new_batch_size, new_seq_len)
+        # bigram_paddings = torch.reshape(bigram_paddings, needed_size) # batch_size * (seq_len+1) x 2
 
         bigram_hidden_states = self.get_hidden_states(bigrams) # batch_size * (seq_len+1) x 2 x encoding_dim
         bigram_hidden_states_d = self.encoding_dropout(bigram_hidden_states) # batch_size * (seq_len+1) x 2 x encoding_dim
-        bigram_softmax_weights = self.get_attention_weights(bigram_hidden_states_d, bigram_paddings) # batch_size * (seq_len+1) x 1 x 2
+        bigram_softmax_weights = self.get_attention_weights(bigram_hidden_states_d) # batch_size * (seq_len+1) x 1 x 2
         bigram_pooled_reps = torch.bmm(bigram_softmax_weights, bigram_hidden_states) # batch_size * (seq_len+1) x 1 x encoding_dim
         
         needed_size = (batch_size, seq_len+1, 1, self.encoding_dim)
@@ -239,25 +242,25 @@ class Find_Module(nn.Module):
         new_seq_len = 3
 
         padding = torch.zeros(batch_size, 2, embedding_dim) # batch_size x 2 x embedding_dim
-        padding_i = torch.ones(batch_size, 2) # batch_size x 2
+        # padding_i = torch.ones(batch_size, 2) # batch_size x 2
         if self.cuda:
             device = torch.device("cuda")
             padding = padding.to(device)
-            padding_i = padding_i.to(device)
+            # padding_i = padding_i.to(device)
 
         padded_embeddings = torch.cat((padding, seq_embs, padding), 1).unsqueeze(2) # batch_size x seq_len+4 x 1 x embedding_dim
         trigrams = torch.cat((padded_embeddings[:,0:-2,:], padded_embeddings[:,1:-1,:], padded_embeddings[:,2:,:]), 2) # batch_size x seq_len+2 x 3 x embedding_dim
         needed_size = (new_batch_size, new_seq_len, embedding_dim)
         trigrams = torch.reshape(trigrams, needed_size) # batch_size * (seq_len+2) x 3 x embedding_dim
 
-        padded_padding_indexes = torch.cat((padding_i, padding_indexes, padding_i), 1).unsqueeze(2) # batch_size x seq_len+4 x 1
-        trigram_paddings = torch.cat((padded_padding_indexes[:,0:-2,:], padded_padding_indexes[:,1:-1,:], padded_padding_indexes[:,2:,:]), 2) # batch_size x seq_len+2 x 3
-        needed_size = (new_batch_size, new_seq_len)
-        trigram_paddings = torch.reshape(trigram_paddings, needed_size) #  batch_size * (seq_len+2) x 3
+        # padded_padding_indexes = torch.cat((padding_i, padding_indexes, padding_i), 1).unsqueeze(2) # batch_size x seq_len+4 x 1
+        # trigram_paddings = torch.cat((padded_padding_indexes[:,0:-2,:], padded_padding_indexes[:,1:-1,:], padded_padding_indexes[:,2:,:]), 2) # batch_size x seq_len+2 x 3
+        # needed_size = (new_batch_size, new_seq_len)
+        # trigram_paddings = torch.reshape(trigram_paddings, needed_size) #  batch_size * (seq_len+2) x 3
 
         trigram_hidden_states = self.get_hidden_states(trigrams) # batch_size * (seq_len+2) x 3 x encoding_dim
         trigram_hidden_states_d = self.encoding_dropout(trigram_hidden_states) # batch_size * (seq_len+2) x 3 x encoding_dim
-        trigram_softmax_weights = self.get_attention_weights(trigram_hidden_states_d, trigram_paddings) # batch_size * (seq_len+2) x 1 x 3
+        trigram_softmax_weights = self.get_attention_weights(trigram_hidden_states_d) # batch_size * (seq_len+2) x 1 x 3
         trigram_pooled_reps = torch.bmm(trigram_softmax_weights, trigram_hidden_states) # batch_size * (seq_len+2) x 1 x encoding_dim
         
         needed_size = (batch_size, seq_len+2, 1, self.encoding_dim)
@@ -329,7 +332,7 @@ class Find_Module(nn.Module):
         """        
         batch_size, seq_len, _ = seq_embeddings.shape
 
-        normalized_query_vectors = f.normalize(query_vectors, p=2, dim=2)
+        normalized_query_vectors = f.normalize(query_vectors + 1e-5, p=2, dim=2)
         normalized_query_vectors = normalized_query_vectors.permute(0, 2, 1) # arranging query_vectors to be N x encoding_dim x 1
         
         if self.sliding_win_size == 3:
@@ -404,12 +407,16 @@ class Find_Module(nn.Module):
 
         query_similarities = torch.mm(pooled_query, pooled_query_d) # N x N
 
-        query_pos_similarities = torch.maximum(tau - query_similarities, zeroes)
-        query_neg_similarities = torch.maximum(query_similarities, zeroes)
+        # import pdb; pdb.set_trace()
 
-        pos_scores = torch.max(query_pos_similarities**2 - 1e30*neg_query_index_matrix, axis=1).values
+        # print(query_index_matrix)
+
+        query_pos_similarities = torch.square(torch.maximum(tau - query_similarities, zeroes))
+        query_neg_similarities = torch.square(torch.maximum(query_similarities, zeroes))
+
+        pos_scores = torch.max(query_pos_similarities - 1e30*neg_query_index_matrix, axis=1).values
         pos_scores = torch.maximum(pos_scores, zeroes) # incase a class only has one example, no loss
-        neg_scores = torch.max(query_neg_similarities**2 - 1e30*query_index_matrix, axis=1).values
+        neg_scores = torch.max(query_neg_similarities - 1e30*query_index_matrix, axis=1).values
         neg_scores = torch.maximum(neg_scores, zeroes)
 
         return pos_scores, neg_scores
