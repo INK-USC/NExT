@@ -408,6 +408,8 @@ class Find_Module(nn.Module):
         query_neg_similarities = torch.maximum(query_similarities, zeroes)
 
         pos_scores = torch.max(query_pos_similarities**2 - 1e30*neg_query_index_matrix, axis=1).values
+        pos_scores = torch.maximum(pos_scores, zeroes) # incase a class only has one example, no loss
         neg_scores = torch.max(query_neg_similarities**2 - 1e30*query_index_matrix, axis=1).values
+        neg_scores = torch.maximum(neg_scores, zeroes)
 
         return pos_scores, neg_scores

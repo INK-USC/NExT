@@ -455,8 +455,8 @@ def similarity_loss_function(pos_scores, neg_scores):
     """
     return torch.mean(pos_scores + neg_scores)
 
-def evaluate_find_module(data_path, act_queries, query_labels, model, find_loss_fn, sim_loss_fn,
-                         batch_size=128, gamma=0.5):
+def evaluate_find_module(data_path, act_queries, query_index_matrix, neg_query_index_matrix, zeroes,
+                         model, find_loss_fn, sim_loss_fn, batch_size=128, gamma=0.5):
     """
         Evaluates a Find Module model against a dataset
 
@@ -502,7 +502,7 @@ def evaluate_find_module(data_path, act_queries, query_labels, model, find_loss_
 
             # model predictions
             token_scores = model.find_forward(tokens, queries)
-            pos_scores, neg_scores = model.sim_forward(act_queries, query_labels)
+            pos_scores, neg_scores = model.sim_forward(act_queries, query_index_matrix, neg_query_index_matrix, zeroes)
 
             # compute the validation loss between actual and predicted values
             find_loss = find_loss_fn(token_scores, labels)
@@ -530,62 +530,3 @@ def evaluate_find_module(data_path, act_queries, query_labels, model, find_loss_
     total_new_scores  = np.concatenate(total_new_scores, axis=0)
 
     return avg_loss, avg_find_loss, avg_sim_loss, avg_f1_score, total_og_scores, total_new_scores
-
-def evaluate_find_loss(data_path, model, find_loss_fn, batch_size=128):
-    """
-        Evaluates a Find Module model against a dataset, where the Find Module is only trained using L_find
-
-        Arguments:
-            data_path            (str) : path to PreTrainingFindModuleDataset that the model should be
-                                         evaluated against
-            model        (Find_Module) : model to use in evaluation
-            find_loss_fn        (func) : loss function for L_find
-            batch_size           (int) : size of batch to use when computing L_find
-        
-        Returns:
-            avg_find_loss, avg_f1_score : average of metrics computed per batch
-    """
-    with open(data_path, "rb") as f:
-        eval_dataset = pickle.load(f)
-    
-    # deactivate dropout layers
-    model.eval()
-    
-    if torch.cuda.is_available():
-        device = torch.device("cuda")
-    else:
-        device = torch.device("cpu")
-    
-    total_find_loss = 0
-    total_f1_score = 0
-    batch_count = 0
-    
-    # iterate over batches
-    for step, batch in enumerate(tqdm(eval_dataset.as_batches(batch_size=batch_size, shuffle=False))):
-        # push the batch to gpu
-        batch = [r.to(device) for r in batch]
-
-        tokens, queries, labels = batch
-
-        # deactivate autograd
-        with torch.no_grad():
-
-            # model predictions
-            token_scores = model.find_forward(tokens, queries)
-
-            # compute the validation loss between actual and predicted values
-            find_loss = find_loss_fn(token_scores, labels)
-
-            scores = token_scores.detach().cpu().numpy().flatten()
-            scores = [1 if score > 0  else 0 for score in scores]
-            f1_labels = labels.detach().cpu().numpy().flatten()
-
-            total_f1_score = total_f1_score + f1_score(f1_labels, scores)
-            total_find_loss = total_find_loss + find_loss.item()
-            batch_count += 1
-
-    # compute the validation loss of the epoch
-    avg_find_loss = total_find_loss / batch_count
-    avg_f1_score = total_f1_score / batch_count
-
-    return avg_find_loss, avg_f1_score

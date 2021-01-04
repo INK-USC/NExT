@@ -183,7 +183,7 @@ def main():
     
     query_index_matrix = torch.tensor(query_index_matrix)
     neg_query_index_matrix = 1.0 - query_index_matrix
-    zeroes = torch.zeros((len(query_labels), len(query_labels)))
+    zeroes = torch.tensor([0.0])
 
     query_index_matrix = query_index_matrix.to(device)
     neg_query_index_matrix = neg_query_index_matrix.to(device)
@@ -256,9 +256,8 @@ def main():
 
 
         print("Starting Evaluation")
-        eval_results = evaluate_find_module(dev_path, real_query_tokens, sim_data["labels"],
-                                            model, find_loss_function, sim_loss_function,
-                                            args.eval_batch_size, args.gamma)
+        eval_results = evaluate_find_module(dev_path, real_query_tokens, query_index_matrix, neg_query_index_matrix, zeroes,
+                                            model, find_loss_function, sim_loss_function, args.eval_batch_size, args.gamma)
         dev_avg_loss, dev_avg_find_loss, dev_avg_sim_loss, dev_f1_score, total_og_scores, total_new_scores = eval_results
         print("Finished Evaluation")
         
@@ -282,9 +281,8 @@ def main():
         print(epoch_losses[-3:])
 
         print("Starting Train Evaluation")
-        eval_results = evaluate_find_module(train_eval_path, real_query_tokens, sim_data["labels"],
-                                            model, find_loss_function, sim_loss_function,
-                                            args.eval_batch_size, args.gamma)
+        eval_results = evaluate_find_module(train_eval_path, real_query_tokens, query_index_matrix, neg_query_index_matrix, zeroes,
+                                            model, find_loss_function, sim_loss_function, args.eval_batch_size, args.gamma)
         train_eval_avg_loss, train_eval_avg_find_loss, train_eval_avg_sim_loss, train_eval_f1_score, total_og_scores, total_new_scores = eval_results
         print("Finished Evaluation")
 
