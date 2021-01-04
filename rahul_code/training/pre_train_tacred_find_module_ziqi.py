@@ -127,7 +127,6 @@ def main():
 
     model = Find_Module_4.Find_Module(emb_weight=vocab.vectors, padding_idx=pad_idx, emb_dim=args.emb_dim,
                                       hidden_dim=args.hidden_dim, cuda=torch.cuda.is_available())
-    
     # number of training epochs
     epochs = args.epochs
     epoch_string = str(epochs)

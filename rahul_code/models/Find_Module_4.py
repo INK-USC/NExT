@@ -1,6 +1,11 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as f
+import sys
+sys.path.append(".")
+sys.path.append("../")
+sys.path.append("../models/")
+import Find_BiLSTM as lstm
 
 class Find_Module(nn.Module):
     def __init__(self, emb_weight, padding_idx, emb_dim, hidden_dim, cuda,
@@ -37,7 +42,7 @@ class Find_Module(nn.Module):
 
         self.embedding_dropout = nn.Dropout(p=embedding_dropout)
         self.embeddings = nn.Embedding.from_pretrained(emb_weight, freeze=False, padding_idx=self.padding_idx)
-        self.bilstm = nn.LSTM(self.emb_dim, self.hidden_dim, num_layers=n_layers, bidirectional=True, batch_first=True, dropout=encoding_dropout)
+        self.bilstm = lstm.FIND_BiLSTM(self.emb_dim, self.hidden_dim, encoding_dropout, n_layers, self.cuda)
         self.encoding_dropout = nn.Dropout(p=encoding_dropout)
                 
         self.attention_matrix = nn.Linear(self.encoding_dim, self.encoding_dim)
@@ -112,7 +117,7 @@ class Find_Module(nn.Module):
             Returns:
                 seq_embs, padding_indexes : N x seq_len x encoding_dim
         """
-        hidden_states, _ = self.bilstm(seq_embs) # N x seq_len x encoding_dim
+        hidden_states = self.bilstm(seq_embs) # N x seq_len x encoding_dim
 
         return hidden_states        
     
