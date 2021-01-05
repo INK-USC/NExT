@@ -9,7 +9,7 @@ import Find_BiLSTM as lstm
 
 class Find_Module(nn.Module):
     def __init__(self, emb_weight, padding_idx, emb_dim, hidden_dim, cuda,
-                 n_layers=2, embedding_dropout=0.04, encoding_dropout=0.1, sliding_win_size=3,
+                 n_layers=2, embedding_dropout=0.04, encoding_dropout=0.5, sliding_win_size=3,
                  padding_score=-1e30):
         """
             Arguments:
@@ -63,26 +63,25 @@ class Find_Module(nn.Module):
 
         self.projection_layer = nn.Linear(self.number_of_cosines, 32)
         nn.init.xavier_uniform_(self.projection_layer.weight)
-        self.projection_transform_layer = nn.Linear(32, 32)
-        nn.init.xavier_uniform_(self.projection_transform_layer.weight)
         self.projection_activation_function = nn.Tanh()
 
-
-        self.weight_linear_layer_1 = nn.Linear(32, 16)
-        nn.init.xavier_uniform_(self.weight_linear_layer_1.weight)
-        self.weight_linear_layer_2 = nn.Linear(16, 16)
-        nn.init.xavier_uniform_(self.weight_linear_layer_2.weight)
-        self.weight_linear_layer_3 = nn.Linear(16, 8)
-        nn.init.xavier_uniform_(self.weight_linear_layer_3.weight)
+        self.weight_linear_layer_1 = nn.Linear(32, 32)
+        nn.init.kaiming_uniform_(self.weight_linear_layer_1.weight, mode='fan_in')
+        self.weight_linear_layer_2 = nn.Linear(32, 16)
+        nn.init.kaiming_uniform_(self.weight_linear_layer_2.weight, mode='fan_in')
+        self.weight_linear_layer_3 = nn.Linear(16, 16)
+        nn.init.kaiming_uniform_(self.weight_linear_layer_3.weight, mode='fan_in')
+        self.weight_linear_layer_4 = nn.Linear(16, 8)
+        nn.init.kaiming_uniform_(self.weight_linear_layer_4.weight, mode='fan_in')
 
         
         # self.weight_linear_layer_6 = nn.Linear(8, 4)
         # nn.init.kaiming_uniform_(self.weight_linear_layer_6.weight, mode='fan_in')
         
-        self.weight_linear_layer_4 = nn.Linear(8, 8)
-        nn.init.xavier_uniform_(self.weight_linear_layer_4.weight)
-        self.weight_linear_layer_5 = nn.Linear(8, 4)
-        nn.init.xavier_uniform_(self.weight_linear_layer_5.weight)
+        self.weight_linear_layer_5 = nn.Linear(8, 8)
+        nn.init.kaiming_uniform_(self.weight_linear_layer_5.weight, mode='fan_in')
+        self.weight_linear_layer_6 = nn.Linear(8, 4)
+        nn.init.kaiming_uniform_(self.weight_linear_layer_6.weight, mode='fan_in')
 
         # self.weight_linear_layer_6 = nn.Linear(16, 16)
         # nn.init.kaiming_uniform_(self.weight_linear_layer_6.weight, mode='fan_in')
@@ -91,7 +90,7 @@ class Find_Module(nn.Module):
         # self.weight_linear_layer_8 = nn.Linear(8, 4)
         # nn.init.kaiming_uniform_(self.weight_linear_layer_8.weight, mode='fan_in')
         
-        self.weight_activation_function = nn.Tanh()
+        self.weight_activation_function = nn.LeakyReLU()
         self.mlp_dropout = nn.Dropout(p=0.1)
 
         self.weight_final_layer = nn.Linear(4, 1)
@@ -399,10 +398,6 @@ class Find_Module(nn.Module):
             projected_combined_cosines = self.projection_layer(combined_cosines)
             projected_combined_cosines = self.projection_activation_function(projected_combined_cosines)
             projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
-
-            projected_combined_cosines = self.projection_transform_layer(projected_combined_cosines)
-            projected_combined_cosines = self.projection_activation_function(projected_combined_cosines)
-            projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
             
             projected_combined_cosines = self.weight_linear_layer_1(projected_combined_cosines)
             projected_combined_cosines = self.weight_activation_function(projected_combined_cosines)
@@ -421,6 +416,10 @@ class Find_Module(nn.Module):
             projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
 
             projected_combined_cosines = self.weight_linear_layer_5(projected_combined_cosines)
+            projected_combined_cosines = self.weight_activation_function(projected_combined_cosines)
+            projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
+
+            projected_combined_cosines = self.weight_linear_layer_6(projected_combined_cosines)
             projected_combined_cosines = self.weight_activation_function(projected_combined_cosines)
             projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
 
