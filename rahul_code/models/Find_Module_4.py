@@ -63,26 +63,26 @@ class Find_Module(nn.Module):
 
         self.projection_layer = nn.Linear(self.number_of_cosines, 32)
         nn.init.xavier_uniform_(self.projection_layer.weight)
+        self.projection_transform_layer = nn.Linear(32, 32)
+        nn.init.xavier_uniform_(self.projection_transform_layer.weight)
         self.projection_activation_function = nn.Tanh()
 
 
-        self.weight_linear_layer_2 = nn.Linear(32,32)
+        self.weight_linear_layer_1 = nn.Linear(32, 16)
+        nn.init.kaiming_uniform_(self.weight_linear_layer_1.weight, mode='fan_in')
+        self.weight_linear_layer_2 = nn.Linear(16, 16)
         nn.init.kaiming_uniform_(self.weight_linear_layer_2.weight, mode='fan_in')
-        self.weight_linear_layer_3 = nn.Linear(32, 16)
+        self.weight_linear_layer_3 = nn.Linear(16, 8)
         nn.init.kaiming_uniform_(self.weight_linear_layer_3.weight, mode='fan_in')
-        self.weight_linear_layer_4 = nn.Linear(16, 16)
-        nn.init.kaiming_uniform_(self.weight_linear_layer_4.weight, mode='fan_in')
-        self.weight_linear_layer_5 = nn.Linear(16, 8)
-        nn.init.kaiming_uniform_(self.weight_linear_layer_5.weight, mode='fan_in')
 
         
         # self.weight_linear_layer_6 = nn.Linear(8, 4)
         # nn.init.kaiming_uniform_(self.weight_linear_layer_6.weight, mode='fan_in')
         
-        self.weight_linear_layer_6 = nn.Linear(8, 8)
-        nn.init.kaiming_uniform_(self.weight_linear_layer_6.weight, mode='fan_in')
-        self.weight_linear_layer_7 = nn.Linear(8, 4)
-        nn.init.kaiming_uniform_(self.weight_linear_layer_7.weight, mode='fan_in')
+        self.weight_linear_layer_4 = nn.Linear(8, 8)
+        nn.init.kaiming_uniform_(self.weight_linear_layer_4.weight, mode='fan_in')
+        self.weight_linear_layer_5 = nn.Linear(8, 4)
+        nn.init.kaiming_uniform_(self.weight_linear_layer_5.weight, mode='fan_in')
 
         # self.weight_linear_layer_6 = nn.Linear(16, 16)
         # nn.init.kaiming_uniform_(self.weight_linear_layer_6.weight, mode='fan_in')
@@ -399,6 +399,14 @@ class Find_Module(nn.Module):
             projected_combined_cosines = self.projection_layer(combined_cosines)
             projected_combined_cosines = self.projection_activation_function(projected_combined_cosines)
             projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
+
+            projected_combined_cosines = self.projection_transform_layer(projected_combined_cosines)
+            projected_combined_cosines = self.projection_activation_function(projected_combined_cosines)
+            projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
+            
+            projected_combined_cosines = self.weight_linear_layer_1(projected_combined_cosines)
+            projected_combined_cosines = self.weight_activation_function(projected_combined_cosines)
+            projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
             
             projected_combined_cosines = self.weight_linear_layer_2(projected_combined_cosines)
             projected_combined_cosines = self.weight_activation_function(projected_combined_cosines)
@@ -407,7 +415,7 @@ class Find_Module(nn.Module):
             projected_combined_cosines = self.weight_linear_layer_3(projected_combined_cosines)
             projected_combined_cosines = self.weight_activation_function(projected_combined_cosines)
             projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
-            
+
             projected_combined_cosines = self.weight_linear_layer_4(projected_combined_cosines)
             projected_combined_cosines = self.weight_activation_function(projected_combined_cosines)
             projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
@@ -416,13 +424,9 @@ class Find_Module(nn.Module):
             projected_combined_cosines = self.weight_activation_function(projected_combined_cosines)
             projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
 
-            projected_combined_cosines = self.weight_linear_layer_6(projected_combined_cosines)
-            projected_combined_cosines = self.weight_activation_function(projected_combined_cosines)
-            projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
-
-            projected_combined_cosines = self.weight_linear_layer_7(projected_combined_cosines)
-            projected_combined_cosines = self.weight_activation_function(projected_combined_cosines)
-            projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
+            # projected_combined_cosines = self.weight_linear_layer_7(projected_combined_cosines)
+            # projected_combined_cosines = self.weight_activation_function(projected_combined_cosines)
+            # projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
 
             # projected_combined_cosines = self.weight_linear_layer_8(projected_combined_cosines)
             # projected_combined_cosines = self.weight_activation_function(projected_combined_cosines)
