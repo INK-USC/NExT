@@ -62,26 +62,26 @@ class Find_Module(nn.Module):
         # self.feature_weight_matrix = nn.Parameter(torch.diag(input=diagonal_vector), requires_grad=True)
 
         self.projection_layer = nn.Linear(self.number_of_cosines, 32)
-        nn.init.xavier_uniform_(self.projection_layer.weight)
-        self.projection_activation_function = nn.Tanh()
+        nn.init.kaiming_uniform_(self.projection_layer.weight, mode='fan_in')
+        self.projection_activation_function = nn.LeakyReLU()
 
         self.weight_linear_layer_1 = nn.Linear(32, 32)
-        nn.init.xavier_uniform_(self.weight_linear_layer_1.weight)
+        nn.init.kaiming_uniform_(self.weight_linear_layer_1.weight, mode='fan_in')
         self.weight_linear_layer_2 = nn.Linear(32, 16)
-        nn.init.xavier_uniform_(self.weight_linear_layer_2.weight)
+        nn.init.kaiming_uniform_(self.weight_linear_layer_2.weight, mode='fan_in')
         self.weight_linear_layer_3 = nn.Linear(16, 16)
-        nn.init.xavier_uniform_(self.weight_linear_layer_3.weight)
+        nn.init.kaiming_uniform_(self.weight_linear_layer_3.weight, mode='fan_in')
         self.weight_linear_layer_4 = nn.Linear(16, 8)
-        nn.init.xavier_uniform_(self.weight_linear_layer_4.weight)
+        nn.init.kaiming_uniform_(self.weight_linear_layer_4.weight, mode='fan_in')
 
         
         # self.weight_linear_layer_6 = nn.Linear(8, 4)
         # nn.init.kaiming_uniform_(self.weight_linear_layer_6.weight, mode='fan_in')
         
         self.weight_linear_layer_5 = nn.Linear(8, 8)
-        nn.init.xavier_uniform_(self.weight_linear_layer_5.weight)
+        nn.init.kaiming_uniform_(self.weight_linear_layer_5.weight, mode='fan_in')
         self.weight_linear_layer_6 = nn.Linear(8, 4)
-        nn.init.xavier_uniform_(self.weight_linear_layer_6.weight)
+        nn.init.kaiming_uniform_(self.weight_linear_layer_6.weight, mode='fan_in')
 
         # self.weight_linear_layer_6 = nn.Linear(16, 16)
         # nn.init.kaiming_uniform_(self.weight_linear_layer_6.weight, mode='fan_in')
@@ -90,7 +90,7 @@ class Find_Module(nn.Module):
         # self.weight_linear_layer_8 = nn.Linear(8, 4)
         # nn.init.kaiming_uniform_(self.weight_linear_layer_8.weight, mode='fan_in')
         
-        self.weight_activation_function = nn.Tanh()
+        self.weight_activation_function = nn.LeakyReLU()
         self.mlp_dropout = nn.Dropout(p=0.1)
 
         self.weight_final_layer = nn.Linear(4, 1)
