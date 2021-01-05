@@ -198,7 +198,7 @@ def main():
         optimizer = Adagrad(model.parameters(), lr=args.learning_rate)   
 
     # define loss functions
-    find_loss_function  = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([20.0]).to(device))
+    find_loss_function  = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([40.0]).to(device))
     sim_loss_function = similarity_loss_function
 
     if not args.load_model:
