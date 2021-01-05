@@ -24,8 +24,8 @@ class FIND_BiLSTM(nn.Module):
         
         if self.layers > 1:
             for i in range(1, layers):
-                temp_forward_lstms.append(nn.LSTM(2*self.output_dim, self.output_dim, batch_first=True))
-                temp_backward_lstms.append(nn.LSTM(2*self.output_dim, self.output_dim, batch_first=True))
+                temp_forward_lstms.append(nn.LSTM(self.output_dim, self.output_dim, batch_first=True))
+                temp_backward_lstms.append(nn.LSTM(self.output_dim, self.output_dim, batch_first=True))
                 # temp_forward_linears.append(nn.Linear(2*self.output_dim, 2*self.output_dim))
                 # temp_backward_linears.append(nn.Linear(2*self.output_dim, 2*self.output_dim))
         
@@ -46,21 +46,21 @@ class FIND_BiLSTM(nn.Module):
     
     def forward(self, input_seqs):
         dropout = self.dropout_pct < 1.0
-        next_input = input_seqs
+        next_input = (input_seqs, input_seqs)
         for layer, fwd_lstm in enumerate(self.forward_lstms):
             if dropout:
-                next_input = self.dropout(next_input)
+                next_input = (self.dropout(next_input[0]), self.dropout(next_input[1]))
 
             # fwd_input = self.forward_linears[layer](next_input)
-            fwd_hidden_states, _ = fwd_lstm(next_input)
+            fwd_hidden_states, _ = fwd_lstm(next_input[0])
             
-            reversed_next_input = torch.flip(next_input, (2,))
+            reversed_next_input = torch.flip(next_input[1], (2,))
             # bwd_input = self.backward_linears[layer](reversed_next_input)
             bwd_hidden_states, _ = self.backward_lstms[layer](reversed_next_input)
             reversed_bwd_hidden_states = torch.flip(bwd_hidden_states, (2,))
             
-            next_input = torch.cat((fwd_hidden_states, reversed_bwd_hidden_states), 2)
+            next_input = (fwd_hidden_states, reversed_bwd_hidden_states)
 
-        return next_input
+        return torch.cat([next_input[0], next_input[1]], 2)
 
 

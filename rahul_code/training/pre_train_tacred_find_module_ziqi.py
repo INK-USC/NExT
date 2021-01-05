@@ -38,19 +38,19 @@ def main():
                         default="../data/tacred_explanations.json",
                         help="Path to explanation data.")
     parser.add_argument("--train_batch_size",
-                        default=100,
+                        default=64,
                         type=int,
                         help="Total batch size for train.")
     parser.add_argument("--eval_batch_size",
-                        default=100,
+                        default=128,
                         type=int,
                         help="Total batch size for eval.")
     parser.add_argument("--learning_rate",
-                        default=0.1,
+                        default=0.001,
                         type=float,
                         help="The initial learning rate for Adam.")
     parser.add_argument("--epochs",
-                        default=10,
+                        default=24,
                         type=int,
                         help="Number of Epochs for training")
     parser.add_argument('--embeddings',
@@ -71,7 +71,7 @@ def main():
                         help="embedding vector size")
     parser.add_argument('--hidden_dim',
                         type=int,
-                        default=100,
+                        default=300,
                         help="hidden vector size of lstm (really 2*hidden_dim, due to bilstm)")
     parser.add_argument('--embedding_dropout',
                         type=float,
@@ -198,7 +198,7 @@ def main():
         optimizer = Adagrad(model.parameters(), lr=args.learning_rate)   
 
     # define loss functions
-    find_loss_function  = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([1.0]).to(device))
+    find_loss_function  = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([40.0]).to(device))
     sim_loss_function = similarity_loss_function
 
     if not args.load_model:
@@ -246,7 +246,7 @@ def main():
             string_loss.backward()
 
             # clip the the gradients to 1.0. It helps in preventing the exploding gradient problem
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
 
             # update parameters
             optimizer.step()
