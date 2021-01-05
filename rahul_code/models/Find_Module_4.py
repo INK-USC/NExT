@@ -9,7 +9,7 @@ import Find_BiLSTM as lstm
 
 class Find_Module(nn.Module):
     def __init__(self, emb_weight, padding_idx, emb_dim, hidden_dim, cuda,
-                 n_layers=2, embedding_dropout=0.04, encoding_dropout=0.5, sliding_win_size=3,
+                 n_layers=2, embedding_dropout=0.04, encoding_dropout=0.1, sliding_win_size=3,
                  padding_score=-1e30):
         """
             Arguments:
