@@ -71,8 +71,15 @@ class Find_Module(nn.Module):
         nn.init.kaiming_uniform_(self.weight_linear_layer_4.weight, mode='fan_in')
         self.weight_linear_layer_5 = nn.Linear(16, 8)
         nn.init.kaiming_uniform_(self.weight_linear_layer_5.weight, mode='fan_in')
-        self.weight_linear_layer_6 = nn.Linear(8, 4)
+        
+        # self.weight_linear_layer_6 = nn.Linear(8, 4)
+        # nn.init.kaiming_uniform_(self.weight_linear_layer_6.weight, mode='fan_in')
+        
+        self.weight_linear_layer_6 = nn.Linear(8, 8)
         nn.init.kaiming_uniform_(self.weight_linear_layer_6.weight, mode='fan_in')
+        self.weight_linear_layer_7 = nn.Linear(8, 4)
+        nn.init.kaiming_uniform_(self.weight_linear_layer_7.weight, mode='fan_in')
+        
         self.weight_activation_function = nn.LeakyReLU()
         self.mlp_dropout = nn.Dropout(p=0.1)
 
@@ -399,6 +406,10 @@ class Find_Module(nn.Module):
             projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
 
             projected_combined_cosines = self.weight_linear_layer_6(projected_combined_cosines)
+            projected_combined_cosines = self.weight_activation_function(projected_combined_cosines)
+            projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
+
+            projected_combined_cosines = self.weight_linear_layer_7(projected_combined_cosines)
             projected_combined_cosines = self.weight_activation_function(projected_combined_cosines)
             projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
             
