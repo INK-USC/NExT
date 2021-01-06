@@ -416,10 +416,10 @@ class Find_Module(nn.Module):
             encoded_cosines = self.encoding_dropout(encoded_cosines)
             
             similarity_scores = self.similarity_head(encoded_cosines)
-
+            
             return similarity_scores
         
-    def find_forward(self, seqs, queries):
+    def find_forward(self, seqs, queries, lower_bound):
         """
             Forward function for computing L_find when pre-training Find Module
             Arguments:
@@ -439,6 +439,8 @@ class Find_Module(nn.Module):
 
         pooled_query_encodings = self.attention_pooling(query_encodings, query_padding_indexes) # N x 1 x encoding_dim
         seq_similarities = self.pre_train_get_similarity(seq_embeddings, seq_padding_indexes, pooled_query_encodings).squeeze(2) # N x seq_len
+
+        seq_similarities = torch.maximum(seq_similarities, lower_bound)
 
         return seq_similarities
 

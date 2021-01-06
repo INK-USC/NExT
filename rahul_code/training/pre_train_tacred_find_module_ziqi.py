@@ -185,7 +185,7 @@ def main():
 
     query_index_matrix = query_index_matrix.to(device)
     neg_query_index_matrix = neg_query_index_matrix.to(device)
-    zeroes = zeroes.to(device)
+    zeroes = zeroes.to(device)    
 
     # define the optimizer
     if args.use_adam:
@@ -217,11 +217,14 @@ def main():
 
             tokens, queries, labels = batch
 
+            lower_bound = torch.full(tokens.shape, -20.0)
+            lower_bound.to(device)
+
             # clear previously calculated gradients 
             model.zero_grad()        
 
             # get model predictions for the current batch
-            token_scores = model.find_forward(tokens, queries)
+            token_scores = model.find_forward(tokens, queries, lower_bound)
             pos_scores, neg_scores = model.sim_forward(real_query_tokens, query_index_matrix, neg_query_index_matrix, zeroes)
             
             # compute the loss between actual and predicted values
