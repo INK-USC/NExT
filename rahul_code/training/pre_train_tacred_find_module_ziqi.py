@@ -218,7 +218,7 @@ def main():
             tokens, queries, labels = batch
 
             lower_bound = torch.full(tokens.shape, -20.0)
-            lower_bound.to(device)
+            lower_bound = lower_bound.to(device)
 
             # clear previously calculated gradients 
             model.zero_grad()        
