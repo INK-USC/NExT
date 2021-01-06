@@ -50,10 +50,10 @@ class Find_Module(nn.Module):
 
         self.cosine_bilstm = nn.LSTM(self.number_of_cosines, 16, num_layers=2, bidirectional=True, batch_first=True)
 
-        diagonal_vector = torch.randn(32, 1)
-        nn.init.kaiming_uniform_(diagonal_vector, a=0.01, mode='fan_out')
-        diagonal_vector = diagonal_vector.squeeze(1)
-        self.feature_weight_matrix = nn.Parameter(torch.diag(input=diagonal_vector), requires_grad=True)
+        # diagonal_vector = torch.randn(32, 1)
+        # nn.init.kaiming_uniform_(diagonal_vector, a=0.01, mode='fan_out')
+        # diagonal_vector = diagonal_vector.squeeze(1)
+        # self.feature_weight_matrix = nn.Parameter(torch.diag(input=diagonal_vector), requires_grad=True)
 
         self.weight_linear_layer_1 = nn.Linear(32, 16)
         nn.init.kaiming_uniform_(self.weight_linear_layer_1.weight, a=0.01, mode='fan_in')
@@ -361,7 +361,7 @@ class Find_Module(nn.Module):
                 (torch.tensor) : N x seq_len x 1
         """
 
-        updated_encodings = torch.matmul(encoded_cosines, self.feature_weight_matrix)
+        # updated_encodings = torch.matmul(encoded_cosines, self.feature_weight_matrix)
         
         compressed_cosines = self.weight_linear_layer_1(updated_encodings)
         compressed_cosines = self.weight_activation_function(compressed_cosines)
