@@ -346,11 +346,10 @@ class Find_Module(nn.Module):
     
     def similarity_head(self, encoded_cosines):
         """
-            Given the output of the cosine_bilstm, amplify certain components and then
-            compress the encoding down to a final score.
+            MLP head on top of encoded representation of cosine similarities
 
             Arguments:
-                combined_cosines (torch.tensor) : N x seq_len x 32
+                combined_cosines (torch.tensor) : N x seq_len x 64
             
             Returns:
                 (torch.tensor) : N x seq_len x 1

@@ -50,7 +50,7 @@ def main():
                         type=float,
                         help="The initial learning rate for Adam.")
     parser.add_argument("--epochs",
-                        default=24,
+                        default=20,
                         type=int,
                         help="Number of Epochs for training")
     parser.add_argument('--embeddings',
