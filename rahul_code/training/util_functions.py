@@ -497,14 +497,14 @@ def evaluate_find_module(data_path, act_queries, query_index_matrix, neg_query_i
 
         tokens, queries, labels = batch
 
-        lower_bound = torch.full(tokens.shape, -20.0)
-        lower_bound = lower_bound.to(device)
+        # lower_bound = torch.full(tokens.shape, -20.0)
+        # lower_bound = lower_bound.to(device)
 
         # deactivate autograd
         with torch.no_grad():
 
             # model predictions
-            token_scores = model.find_forward(tokens, queries, lower_bound)
+            token_scores = model.find_forward(tokens, queries)
             pos_scores, neg_scores = model.sim_forward(act_queries, query_index_matrix, neg_query_index_matrix, zeroes)
 
             # compute the validation loss between actual and predicted values

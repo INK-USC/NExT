@@ -48,7 +48,7 @@ class Find_Module(nn.Module):
         nn.init.kaiming_uniform_(self.attention_vector.weight, mode='fan_in')
         self.attn_softmax = nn.Softmax(dim=2)
 
-        self.cosine_bilstm = nn.LSTM(self.number_of_cosines, 6, num_layers=2, bidirectional=True, batch_first=True)
+        self.cosine_bilstm = nn.LSTM(self.number_of_cosines, 6, num_layers=1, bidirectional=True, batch_first=True)
 
         self.weight_linear_layer_1 = nn.Linear(12, 8)
         nn.init.kaiming_uniform_(self.weight_linear_layer_1.weight, mode='fan_in')
@@ -419,7 +419,7 @@ class Find_Module(nn.Module):
             
             return similarity_scores
         
-    def find_forward(self, seqs, queries, lower_bound):
+    def find_forward(self, seqs, queries):
         """
             Forward function for computing L_find when pre-training Find Module
             Arguments:
@@ -440,7 +440,7 @@ class Find_Module(nn.Module):
         pooled_query_encodings = self.attention_pooling(query_encodings, query_padding_indexes) # N x 1 x encoding_dim
         seq_similarities = self.pre_train_get_similarity(seq_embeddings, seq_padding_indexes, pooled_query_encodings).squeeze(2) # N x seq_len
 
-        seq_similarities = torch.maximum(seq_similarities, lower_bound)
+        # seq_similarities = torch.maximum(seq_similarities, lower_bound)
 
         return seq_similarities
 

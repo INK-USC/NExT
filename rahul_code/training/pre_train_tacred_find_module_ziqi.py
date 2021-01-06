@@ -217,14 +217,14 @@ def main():
 
             tokens, queries, labels = batch
 
-            lower_bound = torch.full(tokens.shape, -20.0)
-            lower_bound = lower_bound.to(device)
+            # lower_bound = torch.full(tokens.shape, -20.0)
+            # lower_bound = lower_bound.to(device)
 
             # clear previously calculated gradients 
             model.zero_grad()        
 
             # get model predictions for the current batch
-            token_scores = model.find_forward(tokens, queries, lower_bound)
+            token_scores = model.find_forward(tokens, queries)
             pos_scores, neg_scores = model.sim_forward(real_query_tokens, query_index_matrix, neg_query_index_matrix, zeroes)
             
             # compute the loss between actual and predicted values
