@@ -73,10 +73,6 @@ def main():
                         type=int,
                         default=300,
                         help="hidden vector size of lstm (really 2*hidden_dim, due to bilstm)")
-    parser.add_argument('--embedding_dropout',
-                        type=float,
-                        default=0.04,
-                        help="embedding dropout")
     parser.add_argument('--model_save_dir',
                         type=str,
                         default="",
@@ -198,7 +194,7 @@ def main():
         optimizer = Adagrad(model.parameters(), lr=args.learning_rate)   
 
     # define loss functions
-    find_loss_function  = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([15.0]).to(device))
+    find_loss_function  = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([20.0]).to(device))
     sim_loss_function = similarity_loss_function
 
     if not args.load_model:

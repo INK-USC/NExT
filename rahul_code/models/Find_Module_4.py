@@ -9,7 +9,7 @@ import Find_BiLSTM as lstm
 
 class Find_Module(nn.Module):
     def __init__(self, emb_weight, padding_idx, emb_dim, hidden_dim, cuda,
-                 n_layers=2, embedding_dropout=0.04, encoding_dropout=0.1, sliding_win_size=3,
+                 n_layers=2, encoding_dropout=0.1, sliding_win_size=3,
                  padding_score=-1e30):
         """
             Arguments:
@@ -21,8 +21,6 @@ class Find_Module(nn.Module):
                 hidden_dim          (int) : size of hidden representation emitted by lstm
                                             (we are using a bi-lstm, final hidden_dim will be 2*hidden_dim)
                 cuda               (bool) : is a gpu available for usage
-                embedding_dropout (float) : percentage of initial embedding's components to be randomly
-                                            zeroed out 
                 encoding_dropout  (float) : percentage of vector's representation to be randomly zeroed
                                             out before pooling
                 sliding_win_size    (int) : size of window to consider when building pooled representations
@@ -38,57 +36,32 @@ class Find_Module(nn.Module):
         self.sliding_win_size = sliding_win_size
         self.number_of_cosines = sum([i+1 for i in range(self.sliding_win_size)])
         self.cuda = cuda
-        self.apply_embedding_dropout = False
 
-        self.embedding_dropout = nn.Dropout(p=embedding_dropout)
         self.embeddings = nn.Embedding.from_pretrained(emb_weight, freeze=False, padding_idx=self.padding_idx)
         self.bilstm = nn.LSTM(self.emb_dim, self.hidden_dim, num_layers=n_layers, bidirectional=True, batch_first=True)
-        # self.bilstm = lstm.FIND_BiLSTM(self.emb_dim, self.hidden_dim, encoding_dropout, n_layers, self.cuda)
         self.encoding_dropout = nn.Dropout(p=encoding_dropout)
         
         self.attention_matrix = nn.Linear(self.encoding_dim, self.encoding_dim)
         nn.init.xavier_uniform_(self.attention_matrix.weight)
-        # temp_att_vector = torch.zeros(self.encoding_dim, 1)
-        # nn.init.xavier_uniform_(temp_att_vector)
-        # self.attention_vector = nn.Parameter(temp_att_vector, requires_grad=True)
         self.attention_activation = nn.Tanh()
         self.attention_vector = nn.Linear(self.encoding_dim, 1, bias=False)
         nn.init.kaiming_uniform_(self.attention_vector.weight, mode='fan_in')
         self.attn_softmax = nn.Softmax(dim=2)
 
-        # diagonal_vector = torch.zeros(self.encoding_dim, 1)
-        # nn.init.kaiming_uniform_(diagonal_vector, mode='fan_out')
-        # diagonal_vector = diagonal_vector.squeeze(1)
-        # self.feature_weight_matrix = nn.Parameter(torch.diag(input=diagonal_vector), requires_grad=True)
-
-        self.projection_layer = nn.Linear(self.number_of_cosines, 32)
-        nn.init.kaiming_uniform_(self.projection_layer.weight, mode='fan_in')
-        self.projection_activation_function = nn.LeakyReLU()
-
-        self.weight_linear_layer_1 = nn.Linear(32, 32)
+        self.weight_linear_layer_1 = nn.Linear(self.number_of_cosines, 32)
         nn.init.kaiming_uniform_(self.weight_linear_layer_1.weight, mode='fan_in')
-        self.weight_linear_layer_2 = nn.Linear(32, 16)
+        self.weight_linear_layer_2 = nn.Linear(32, 32)
         nn.init.kaiming_uniform_(self.weight_linear_layer_2.weight, mode='fan_in')
-        self.weight_linear_layer_3 = nn.Linear(16, 16)
+        self.weight_linear_layer_3 = nn.Linear(32, 16)
         nn.init.kaiming_uniform_(self.weight_linear_layer_3.weight, mode='fan_in')
-        self.weight_linear_layer_4 = nn.Linear(16, 8)
+        self.weight_linear_layer_4 = nn.Linear(16, 16)
         nn.init.kaiming_uniform_(self.weight_linear_layer_4.weight, mode='fan_in')
-
-        
-        # self.weight_linear_layer_6 = nn.Linear(8, 4)
-        # nn.init.kaiming_uniform_(self.weight_linear_layer_6.weight, mode='fan_in')
-        
-        self.weight_linear_layer_5 = nn.Linear(8, 8)
+        self.weight_linear_layer_5 = nn.Linear(16, 8)
         nn.init.kaiming_uniform_(self.weight_linear_layer_5.weight, mode='fan_in')
-        self.weight_linear_layer_6 = nn.Linear(8, 4)
+        self.weight_linear_layer_6 = nn.Linear(8, 8)
         nn.init.kaiming_uniform_(self.weight_linear_layer_6.weight, mode='fan_in')
-
-        # self.weight_linear_layer_6 = nn.Linear(16, 16)
-        # nn.init.kaiming_uniform_(self.weight_linear_layer_6.weight, mode='fan_in')
-        # self.weight_linear_layer_7 = nn.Linear(16, 8)
-        # nn.init.kaiming_uniform_(self.weight_linear_layer_6.weight, mode='fan_in')
-        # self.weight_linear_layer_8 = nn.Linear(8, 4)
-        # nn.init.kaiming_uniform_(self.weight_linear_layer_8.weight, mode='fan_in')
+        self.weight_linear_layer_7 = nn.Linear(8, 4)
+        nn.init.kaiming_uniform_(self.weight_linear_layer_7.weight, mode='fan_in')
         
         self.weight_activation_function = nn.LeakyReLU()
         self.mlp_dropout = nn.Dropout(p=0.1)
@@ -97,10 +70,19 @@ class Find_Module(nn.Module):
         nn.init.xavier_uniform_(self.weight_final_layer.weight)
 
     def get_attention_weights(self, hidden_states, padding_indexes=None):
+        """
+            Calculates attention weights
+
+            Arguments:
+                hidden_states   (torch.tensor) : N x seq_len x encoding_dim
+                padding_indexes (torch.tensor) : N x seq_len
+
+            Returns:
+                (torch.tensor) : N x 1 x seq_len
+        """
         linear_transform = self.attention_matrix(hidden_states) # linear_transform = N x seq_len x encoding_dim
         tanh_tensor = self.attention_activation(linear_transform) # element wise tanh
         batch_dot_products = self.attention_vector(tanh_tensor) # batch_dot_product = batch x seq_len x 1
-        # batch_dot_products = torch.matmul(tanh_tensor, self.attention_vector) # batch_dot_product = batch x seq_len x 1
         if padding_indexes != None:
             padding_scores = self.padding_score * padding_indexes # N x seq_len
             batch_dot_products = batch_dot_products + padding_scores.unsqueeze(2) # making sure score of padding_idx tokens is incredibly low
@@ -138,9 +120,6 @@ class Find_Module(nn.Module):
         padding_indexes = padding_indexes.float()
         
         seq_embs = self.embeddings(seqs) # seq_embs = N x seq_len x embedding_dim
-        
-        if self.apply_embedding_dropout:
-            seq_embs = self.embedding_dropout(seq_embs)
         
         return seq_embs, padding_indexes
     
@@ -313,11 +292,16 @@ class Find_Module(nn.Module):
     
     def compute_unigram_similarities(self, seq_embs, normalized_query_vectors):
         """
-            seq_embs : N x seq_len x embedding_dim
-            normalized_query_vectors : N x encoding_dim x 1
+            Compute similarities between unigram representations and pooled query representations
+            
+            Arguments:
+                seq_embs                 (torch.tensor) : N x seq_len x embedding_dim
+                normalized_query_vectors (torch.tensor) : N x encoding_dim x 1
+            
+            Returns:
+                (torch.tensor) :  N x seq_len x 1
         """
         unigram_hidden_states = self._build_unigram_hidden_states(seq_embs) # N x seq_len x encoding_dim
-        # updated_unigram_hidden_states = torch.matmul(unigram_hidden_states, self.feature_weight_matrix)
         unigram_similarities = self.compute_dot_product_between_token_rep_and_query_vectors(unigram_hidden_states,
                                                                                             normalized_query_vectors) # N x seq_len x 1
         
@@ -325,13 +309,18 @@ class Find_Module(nn.Module):
     
     def compute_bigram_similarities(self, seq_embs, padding_indexes, normalized_query_vectors):
         """
-            seq_embs : N x seq_len x embedding_dim
-            padding_indexes : N x seq_len
-            normalized_query_vectors : N x encoding_dim x 1
+            Compute similarities between bigram representations and pooled query representations
+
+            Arguments:
+                seq_embs                 (torch.tensor) : N x seq_len x embedding_dim
+                padding_indexes          (torch.tensor) : N x seq_len
+                normalized_query_vectors (torch.tensor) : N x encoding_dim x 1
+            
+            Returns:
+                fwd_similarities, bwd_similarities :  N x seq_len x 1
         """
         _, seq_len, _ = seq_embs.shape
         bigram_hidden_states = self._build_bigram_hidden_states(seq_embs, padding_indexes) # N x seq_len+1 x encoding_dim
-        # updated_bigram_hidden_states = torch.matmul(bigram_hidden_states, self.feature_weight_matrix)
         bigram_similarities = self.compute_dot_product_between_token_rep_and_query_vectors(bigram_hidden_states,
                                                                                             normalized_query_vectors) # N x seq_len+1 x 1
         bwd_similarities = bigram_similarities[:,:seq_len,:] # batch_size x seq_len x 1
@@ -341,13 +330,18 @@ class Find_Module(nn.Module):
     
     def compute_trigram_similarities(self, seq_embs, padding_indexes, normalized_query_vectors):
         """
-            seq_embs : N x seq_len x embedding_dim
-            padding_indexes : N x seq_len
-            normalized_query_vectors : N x encoding_dim x 1
+            Compute similarities between trigram representations and pooled query representations
+
+            Arguments:
+                seq_embs                 (torch.tensor) : N x seq_len x embedding_dim
+                padding_indexes          (torch.tensor) : N x seq_len
+                normalized_query_vectors (torch.tensor) : N x encoding_dim x 1
+            
+            Returns:
+                fwd_similarities, mid_similarities, bwd_similarities :  N x seq_len x 1
         """
         _, seq_len, _ = seq_embs.shape
         trigram_hidden_states = self._build_trigram_hidden_states(seq_embs, padding_indexes) # N x seq_len+2 x encoding_dim
-        # updated_trigram_hidden_states = torch.matmul(trigram_hidden_states, self.feature_weight_matrix)
         trigram_similarities = self.compute_dot_product_between_token_rep_and_query_vectors(trigram_hidden_states,
                                                                                             normalized_query_vectors) # N x seq_len+2 x 1
         bwd_similarities = trigram_similarities[:,:seq_len,:] # batch_size x seq_len x 1
@@ -356,6 +350,51 @@ class Find_Module(nn.Module):
 
         return fwd_similarities, mid_similarities, bwd_similarities
     
+    def similarity_head(self, combined_cosines):
+        """
+            Taking the information packed in the cosine similarities, project the information up
+            and then bring it back down to finally make a decision if a token is part of a pattern
+            or not.
+
+            Arguments:
+                combined_cosines (torch.tensor) : N x seq_len x 6
+            
+            Returns:
+                (torch.tensor) : N x seq_len x 1
+        """
+        
+        projected_combined_cosines = self.weight_linear_layer_1(combined_cosines)
+        projected_combined_cosines = self.weight_activation_function(projected_combined_cosines)
+        projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
+        
+        projected_combined_cosines = self.weight_linear_layer_2(projected_combined_cosines)
+        projected_combined_cosines = self.weight_activation_function(projected_combined_cosines)
+        projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
+        
+        projected_combined_cosines = self.weight_linear_layer_3(projected_combined_cosines)
+        projected_combined_cosines = self.weight_activation_function(projected_combined_cosines)
+        projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
+
+        projected_combined_cosines = self.weight_linear_layer_4(projected_combined_cosines)
+        projected_combined_cosines = self.weight_activation_function(projected_combined_cosines)
+        projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
+
+        projected_combined_cosines = self.weight_linear_layer_5(projected_combined_cosines)
+        projected_combined_cosines = self.weight_activation_function(projected_combined_cosines)
+        projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
+
+        projected_combined_cosines = self.weight_linear_layer_6(projected_combined_cosines)
+        projected_combined_cosines = self.weight_activation_function(projected_combined_cosines)
+        projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
+
+        projected_combined_cosines = self.weight_linear_layer_7(projected_combined_cosines)
+        projected_combined_cosines = self.weight_activation_function(projected_combined_cosines)
+        projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
+            
+        similarity_scores = self.weight_final_layer(projected_combined_cosines)
+
+        return similarity_scores
+
     def pre_train_get_similarity(self, seq_embeddings, padding_indexes, query_vectors):
         """
             Compute similarity between each token in a sequence and the corresponding query_vector per the
@@ -394,44 +433,8 @@ class Find_Module(nn.Module):
                                           fwd_trigram_hs_cosine,
                                           mid_trigram_hs_cosine,
                                           bwd_trigram_hs_cosine), 2) # combined_cosines = N x seq_len x sliding_win_size
-            
-            projected_combined_cosines = self.projection_layer(combined_cosines)
-            projected_combined_cosines = self.projection_activation_function(projected_combined_cosines)
-            projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
-            
-            projected_combined_cosines = self.weight_linear_layer_1(projected_combined_cosines)
-            projected_combined_cosines = self.weight_activation_function(projected_combined_cosines)
-            projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
-            
-            projected_combined_cosines = self.weight_linear_layer_2(projected_combined_cosines)
-            projected_combined_cosines = self.weight_activation_function(projected_combined_cosines)
-            projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
-            
-            projected_combined_cosines = self.weight_linear_layer_3(projected_combined_cosines)
-            projected_combined_cosines = self.weight_activation_function(projected_combined_cosines)
-            projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
 
-            projected_combined_cosines = self.weight_linear_layer_4(projected_combined_cosines)
-            projected_combined_cosines = self.weight_activation_function(projected_combined_cosines)
-            projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
-
-            projected_combined_cosines = self.weight_linear_layer_5(projected_combined_cosines)
-            projected_combined_cosines = self.weight_activation_function(projected_combined_cosines)
-            projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
-
-            projected_combined_cosines = self.weight_linear_layer_6(projected_combined_cosines)
-            projected_combined_cosines = self.weight_activation_function(projected_combined_cosines)
-            projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
-
-            # projected_combined_cosines = self.weight_linear_layer_7(projected_combined_cosines)
-            # projected_combined_cosines = self.weight_activation_function(projected_combined_cosines)
-            # projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
-
-            # projected_combined_cosines = self.weight_linear_layer_8(projected_combined_cosines)
-            # projected_combined_cosines = self.weight_activation_function(projected_combined_cosines)
-            # projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
-            
-            similarity_scores = self.weight_final_layer(projected_combined_cosines)
+            similarity_scores = self.similarity_head(combined_cosines)
 
             return similarity_scores
         
@@ -484,17 +487,10 @@ class Find_Module(nn.Module):
         pooled_query = torch.bmm(query_attention_weights, query_encodings) # N x 1 x encoding_dim
         pooled_query_d = torch.bmm(query_attention_weights, query_encodings_d) # N x 1 x encoding_dim
 
-        # pooled_query = torch.matmul(pooled_query, self.feature_weight_matrix)
-        # pooled_query_d = torch.matmul(pooled_query_d, self.feature_weight_matrix)
-
         pooled_query = f.normalize(pooled_query + 1e-5, p=2, dim=2).squeeze(1) # N x encoding_dim
         pooled_query_d = f.normalize(pooled_query_d + 1e-5, p=2, dim=2).squeeze(1).permute(1,0) # encoding_dim x N
 
         query_similarities = torch.mm(pooled_query, pooled_query_d) # N x N
-
-        # import pdb; pdb.set_trace()
-
-        # print(query_index_matrix)
 
         query_pos_similarities = torch.square(torch.maximum(tau - query_similarities, zeroes))
         query_neg_similarities = torch.square(torch.maximum(query_similarities, zeroes))
