@@ -48,7 +48,7 @@ class Find_Module(nn.Module):
         nn.init.kaiming_uniform_(self.attention_vector.weight, mode='fan_in')
         self.attn_softmax = nn.Softmax(dim=2)
 
-        self.cosine_bilstm = nn.LSTM(self.number_of_cosines, 16, num_layers=1, bidirectional=True, batch_first=True)
+        self.cosine_bilstm = nn.LSTM(self.number_of_cosines, 16, num_layers=2, bidirectional=True, batch_first=True)
 
         self.weight_linear_layer_1 = nn.Linear(32, 16)
         nn.init.kaiming_uniform_(self.weight_linear_layer_1.weight, mode='fan_in')
