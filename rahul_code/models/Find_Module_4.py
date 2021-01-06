@@ -48,14 +48,14 @@ class Find_Module(nn.Module):
         nn.init.kaiming_uniform_(self.attention_vector.weight, mode='fan_in')
         self.attn_softmax = nn.Softmax(dim=2)
 
-        self.cosine_bilstm = nn.LSTM(self.number_of_cosines, self.number_of_cosines, num_layers=n_layers, bidirectional=True, batch_first=True)
+        self.cosine_bilstm = nn.LSTM(self.number_of_cosines, 16, num_layers=n_layers, bidirectional=True, batch_first=True)
 
-        self.weight_linear_layer_1 = nn.Linear(2*self.number_of_cosines, 8)
+        self.weight_linear_layer_1 = nn.Linear(32, 16)
         nn.init.kaiming_uniform_(self.weight_linear_layer_1.weight, mode='fan_in')
-        self.weight_linear_layer_2 = nn.Linear(8, 4)
+        self.weight_linear_layer_2 = nn.Linear(16, 8)
         nn.init.kaiming_uniform_(self.weight_linear_layer_2.weight, mode='fan_in')
-        # self.weight_linear_layer_3 = nn.Linear(8, 4)
-        # nn.init.kaiming_uniform_(self.weight_linear_layer_3.weight, mode='fan_in')
+        self.weight_linear_layer_3 = nn.Linear(8, 4)
+        nn.init.kaiming_uniform_(self.weight_linear_layer_3.weight, mode='fan_in')
         
         self.weight_activation_function = nn.LeakyReLU()
         self.mlp_dropout = nn.Dropout(p=0.1)
@@ -365,9 +365,9 @@ class Find_Module(nn.Module):
         projected_combined_cosines = self.weight_activation_function(projected_combined_cosines)
         projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
         
-        # projected_combined_cosines = self.weight_linear_layer_3(projected_combined_cosines)
-        # projected_combined_cosines = self.weight_activation_function(projected_combined_cosines)
-        # projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
+        projected_combined_cosines = self.weight_linear_layer_3(projected_combined_cosines)
+        projected_combined_cosines = self.weight_activation_function(projected_combined_cosines)
+        projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
             
         similarity_scores = self.weight_final_layer(projected_combined_cosines)
 
