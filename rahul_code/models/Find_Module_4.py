@@ -48,19 +48,19 @@ class Find_Module(nn.Module):
         nn.init.kaiming_uniform_(self.attention_vector.weight, mode='fan_in')
         self.attn_softmax = nn.Softmax(dim=2)
 
-        self.cosine_bilstm = nn.LSTM(self.number_of_cosines, 8, num_layers=2, bidirectional=True, batch_first=True)
+        self.cosine_bilstm = nn.LSTM(self.number_of_cosines, 16, num_layers=2, bidirectional=True, batch_first=True)
 
         # diagonal_vector = torch.randn(32, 1)
         # nn.init.kaiming_uniform_(diagonal_vector, a=0.01, mode='fan_out')
         # diagonal_vector = diagonal_vector.squeeze(1)
         # self.feature_weight_matrix = nn.Parameter(torch.diag(input=diagonal_vector), requires_grad=True)
 
-        self.weight_linear_layer_1 = nn.Linear(16, 8)
+        self.weight_linear_layer_1 = nn.Linear(32, 16)
         nn.init.kaiming_uniform_(self.weight_linear_layer_1.weight, a=0.01, mode='fan_in')
-        self.weight_linear_layer_2 = nn.Linear(8, 4)
+        self.weight_linear_layer_2 = nn.Linear(16, 8)
         nn.init.kaiming_uniform_(self.weight_linear_layer_2.weight, a=0.01, mode='fan_in')
-        # self.weight_linear_layer_3 = nn.Linear(8, 4)
-        # nn.init.kaiming_uniform_(self.weight_linear_layer_3.weight, a=0.01, mode='fan_in')
+        self.weight_linear_layer_3 = nn.Linear(8, 4)
+        nn.init.kaiming_uniform_(self.weight_linear_layer_3.weight, a=0.01, mode='fan_in')
         
         self.weight_activation_function = nn.LeakyReLU()
         self.mlp_dropout = nn.Dropout(p=0.1)
@@ -371,9 +371,9 @@ class Find_Module(nn.Module):
         compressed_cosines = self.weight_activation_function(compressed_cosines)
         compressed_cosines = self.mlp_dropout(compressed_cosines)
         
-        # compressed_cosines = self.weight_linear_layer_3(compressed_cosines)
-        # compressed_cosines = self.weight_activation_function(compressed_cosines)
-        # compressed_cosines = self.mlp_dropout(compressed_cosines)
+        compressed_cosines = self.weight_linear_layer_3(compressed_cosines)
+        compressed_cosines = self.weight_activation_function(compressed_cosines)
+        compressed_cosines = self.mlp_dropout(compressed_cosines)
             
         similarity_scores = self.weight_final_layer(compressed_cosines)
 
