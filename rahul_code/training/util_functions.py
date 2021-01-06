@@ -497,7 +497,7 @@ def evaluate_find_module(data_path, act_queries, query_index_matrix, neg_query_i
 
         tokens, queries, labels = batch
 
-        lower_bound = torch.full(tokens.shape, -6.5)
+        lower_bound = torch.full(tokens.shape, -20.0)
         lower_bound = lower_bound.to(device)
 
         # deactivate autograd

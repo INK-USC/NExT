@@ -50,12 +50,17 @@ class Find_Module(nn.Module):
 
         self.cosine_bilstm = nn.LSTM(self.number_of_cosines, 16, num_layers=2, bidirectional=True, batch_first=True)
 
+        diagonal_vector = torch.randn(32, 1)
+        nn.init.kaiming_uniform_(diagonal_vector, a=0.01, mode='fan_out')
+        diagonal_vector = diagonal_vector.squeeze(1)
+        self.feature_weight_matrix = nn.Parameter(torch.diag(input=diagonal_vector), requires_grad=True)
+
         self.weight_linear_layer_1 = nn.Linear(32, 16)
-        nn.init.kaiming_uniform_(self.weight_linear_layer_1.weight, mode='fan_in')
+        nn.init.kaiming_uniform_(self.weight_linear_layer_1.weight, a=0.01, mode='fan_in')
         self.weight_linear_layer_2 = nn.Linear(16, 8)
-        nn.init.kaiming_uniform_(self.weight_linear_layer_2.weight, mode='fan_in')
+        nn.init.kaiming_uniform_(self.weight_linear_layer_2.weight, a=0.01, mode='fan_in')
         self.weight_linear_layer_3 = nn.Linear(8, 4)
-        nn.init.kaiming_uniform_(self.weight_linear_layer_3.weight, mode='fan_in')
+        nn.init.kaiming_uniform_(self.weight_linear_layer_3.weight, a=0.01, mode='fan_in')
         
         self.weight_activation_function = nn.LeakyReLU()
         self.mlp_dropout = nn.Dropout(p=0.1)
@@ -344,32 +349,33 @@ class Find_Module(nn.Module):
 
         return fwd_similarities, mid_similarities, bwd_similarities
     
-    def similarity_head(self, combined_cosines):
+    def similarity_head(self, encoded_cosines):
         """
-            Taking the information packed in the cosine similarities, project the information up
-            and then bring it back down to finally make a decision if a token is part of a pattern
-            or not.
+            Given the output of the cosine_bilstm, amplify certain components and then
+            compress the encoding down to a final score.
 
             Arguments:
-                combined_cosines (torch.tensor) : N x seq_len x 6
+                combined_cosines (torch.tensor) : N x seq_len x 32
             
             Returns:
                 (torch.tensor) : N x seq_len x 1
         """
+
+        updated_encodings = torch.matmul(encoded_cosines, self.feature_weight_matrix)
         
-        projected_combined_cosines = self.weight_linear_layer_1(combined_cosines)
-        projected_combined_cosines = self.weight_activation_function(projected_combined_cosines)
-        projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
+        compressed_cosines = self.weight_linear_layer_1(updated_encodings)
+        compressed_cosines = self.weight_activation_function(compressed_cosines)
+        compressed_cosines = self.mlp_dropout(compressed_cosines)
         
-        projected_combined_cosines = self.weight_linear_layer_2(projected_combined_cosines)
-        projected_combined_cosines = self.weight_activation_function(projected_combined_cosines)
-        projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
+        compressed_cosines = self.weight_linear_layer_2(compressed_cosines)
+        compressed_cosines = self.weight_activation_function(compressed_cosines)
+        compressed_cosines = self.mlp_dropout(compressed_cosines)
         
-        projected_combined_cosines = self.weight_linear_layer_3(projected_combined_cosines)
-        projected_combined_cosines = self.weight_activation_function(projected_combined_cosines)
-        projected_combined_cosines = self.mlp_dropout(projected_combined_cosines)
+        compressed_cosines = self.weight_linear_layer_3(compressed_cosines)
+        compressed_cosines = self.weight_activation_function(compressed_cosines)
+        compressed_cosines = self.mlp_dropout(compressed_cosines)
             
-        similarity_scores = self.weight_final_layer(projected_combined_cosines)
+        similarity_scores = self.weight_final_layer(compressed_cosines)
 
         return similarity_scores
 
