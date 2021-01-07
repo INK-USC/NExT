@@ -105,8 +105,8 @@ def main():
     with open("../data/pre_train_data/train_data_{}.p".format(save_string), "rb") as f:
         train_dataset = pickle.load(f)
     
-    dev_path = "../data/pre_train_data/ziqi_test_2_data_{}.p".format(save_string)
-    train_eval_path = "../data/pre_train_data/train_test_data_{}.p".format(save_string)
+    dev_path = "../data/pre_train_data/devdata_{}.p".format(save_string)
+    train_eval_path = "../data/pre_train_data/ziqi_test_2_data_{}.p".format(save_string)
     
     with open("../data/pre_train_data/vocab_{}.p".format(save_string), "rb") as f:
         vocab = pickle.load(f)
