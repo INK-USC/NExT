@@ -3,7 +3,8 @@ from transformers import AdamW
 import sys
 sys.path.append(".")
 sys.path.append("../")
-from util_functions import build_pre_train_find_datasets, evaluate_find_loss
+from util_functions import build_pre_train_find_datasets, similarity_loss_function, evaluate_find_module
+from util_classes import PreTrainingFindModuleDataset
 from models import Find_Module
 import pickle
 from tqdm import tqdm
@@ -28,15 +29,15 @@ def main():
                         default="../data/ec_explanations.json",
                         help="Path to explanation data.")
     parser.add_argument("--train_batch_size",
-                        default=32,
+                        default=128,
                         type=int,
                         help="Total batch size for train.")
     parser.add_argument("--eval_batch_size",
-                        default=32,
+                        default=128,
                         type=int,
                         help="Total batch size for eval.")
     parser.add_argument("--learning_rate",
-                        default=1e-5,
+                        default=1e-3,
                         type=float,
                         help="The initial learning rate for Adam.")
     parser.add_argument("--epochs",
@@ -103,6 +104,9 @@ def main():
     with open("../data/pre_train_data/vocab_{}_{}.p".format(args.embeddings, str(args.seed)), "rb") as f:
         vocab = pickle.load(f)
     
+    with open("../data/pre_train_data/sim_data_{}_{}.p".format(args.embeddings, str(args.seed)), "rb") as f:
+        sim_data = pickle.load(f)
+    
     pad_idx = vocab["<pad>"]
 
     if torch.cuda.is_available():
@@ -115,17 +119,21 @@ def main():
                                     cuda=torch.cuda.is_available(), embedding_dropout=args.embedding_dropout)
     
     if args.load_model:
-        model.load_state_dict(torch.load("../data/saved_models/Find-Module-find-loss-pt_{}.pt".format(args.experiment_name)))
+        model.load_state_dict(torch.load("../data/saved_models/Find-Module-pt_{}.pt".format(args.experiment_name)))
         print("loaded model")
     
     del vocab
     model = model.to(device)
+
+    real_query_tokens = PreTrainingFindModuleDataset.variable_length_batch_as_tensors(sim_data["queries"], pad_idx)
+    real_query_tokens = real_query_tokens.to(device)
 
     # define the optimizer
     optimizer = AdamW(model.parameters(), lr=args.learning_rate)   
 
     # define loss functions
     find_loss_function  = nn.BCEWithLogitsLoss()
+    sim_loss_function = similarity_loss_function
 
     # number of training epochs
     epochs = args.epochs
@@ -136,7 +144,7 @@ def main():
     for epoch in range(args.start_epoch-1,epochs):
         print('\n Epoch {:} / {:}'.format(epoch + 1, epochs))
 
-        find_total_loss = 0
+        total_loss, find_total_loss, sim_total_loss = 0, 0, 0
         batch_count = 0
         model.train()
         # iterate over batches
@@ -151,16 +159,21 @@ def main():
 
             # get model predictions for the current batch
             token_scores = model.find_forward(tokens, queries)
+            pos_scores, neg_scores = model.sim_forward(real_query_tokens, sim_data["labels"])
 
             # compute the loss between actual and predicted values
             find_loss = find_loss_function(token_scores, labels)
+            sim_loss = sim_loss_function(pos_scores, neg_scores)
+            string_loss = find_loss + args.gamma * sim_loss
 
             # add on to the total loss
             find_total_loss = find_total_loss  + find_loss.item()
+            sim_total_loss = sim_total_loss + sim_loss.item()
+            total_loss = total_loss + string_loss.item()
             batch_count += 1
 
             # backward pass to calculate the gradients
-            find_loss.backward()
+            string_loss.backward()
 
             # clip the the gradients to 1.0. It helps in preventing the exploding gradient problem
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -169,30 +182,33 @@ def main():
             optimizer.step()
 
         # compute the training loss of the epoch
+        train_avg_loss = total_loss / batch_count
         train_avg_find_loss = find_total_loss / batch_count
+        train_avg_sim_loss = sim_total_loss / batch_count
+
 
         print("Starting Evaluation")
-        eval_results = evaluate_find_loss(dev_path, model, find_loss_function, args.eval_batch_size)
-        dev_avg_find_loss, dev_f1_scores = eval_results
+        eval_results = evaluate_find_module(dev_path, real_query_tokens, sim_data["labels"], model, find_loss_function, sim_loss_function, args.eval_batch_size, args.gamma)
+        dev_avg_loss, dev_avg_find_loss, dev_avg_sim_loss, dev_f1_scores = eval_results
         print("Finished Evaluation")
         
-        if dev_avg_find_loss < best_eval_loss:
+        if dev_avg_loss < best_eval_loss:
             print("Saving Model")
             if len(args.model_save_dir) > 0:
                 dir_name = args.model_save_dir
             else:
                 dir_name = "../data/saved_models/"
-            torch.save(model.state_dict(), "{}Find-Module-find-loss-pt_{}.pt".format(dir_name, args.experiment_name))
-            best_eval_loss = dev_avg_find_loss
+            torch.save(model.state_dict(), "{}Find-Module-pt_{}.pt".format(dir_name, args.experiment_name))
+            best_eval_loss = dev_avg_loss
 
-        epoch_losses.append((train_avg_find_loss, dev_avg_find_loss, dev_f1_scores))
+        epoch_losses.append((train_avg_loss, train_avg_find_loss, train_avg_sim_loss, dev_avg_loss, dev_avg_find_loss, dev_avg_sim_loss, dev_f1_scores))
 
         print(epoch_losses)
 
     epoch_string = str(epochs)
-    with open("../data/result_data/loss_per_epoch_Find-Module-find-loss-pt_{}.csv".format(args.experiment_name), "w") as f:
+    with open("../data/result_data/loss_per_epoch_Find-Module-pt_{}.csv".format(args.experiment_name), "w") as f:
         writer=csv.writer(f)
-        writer.writerow(['train_find_loss', 'dev_find_loss', 'dev_f1_score'])
+        writer.writerow(['train_loss','train_find_loss', 'train_sim_loss', 'dev_loss', 'dev_find_loss', 'dev_sim_loss', 'dev_f1_score'])
         for row in epoch_losses:
             writer.writerow(row)
 

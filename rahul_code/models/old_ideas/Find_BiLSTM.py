@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import pdb
 
+# NOT USED FOR NOW
 class FIND_BiLSTM(nn.Module):
     def __init__(self, input_dim, output_dim, dropout, layers, cuda):
         super(FIND_BiLSTM, self).__init__()

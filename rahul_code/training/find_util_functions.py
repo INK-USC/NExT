@@ -10,6 +10,7 @@ from util_classes import PreTrainingFindModuleDataset
 from tqdm import tqdm
 import re
 import numpy as np
+import pdb
 
 nlp = spacy.load("en_core_web_sm")
 
@@ -18,21 +19,28 @@ possible_embeddings = ['charngram.100d', 'fasttext.en.300d', 'fasttext.simple.30
 'glove.twitter.27B.200d', 'glove.6B.50d', 'glove.6B.100d', 'glove.6B.200d', 'glove.6B.300d']
 
 def find_array_start_position(big_array, small_array):
-    start_position = -1
-    cur_position = 0
-    small_array_len = len(small_array)
-    for i, elem in enumerate(big_array):
-        if elem == small_array[cur_position]:
-            if cur_position == 0:
-                start_position = i
-            cur_position += 1
-        else:
-            cur_position = 0
-            start_position = -1
+    """
+        Find the starting index of a sub_array inside of a larger array
+
+        Returns -1 if the small_array is not contrained within the larger array
+
+        Arguments:
+            big_array   (arr) : the larger array to search through
+            small_array (arr) : the smaller array to find
         
-        if cur_position == small_array_len:
-            return start_position
-    
+        Returns:
+            int : start position of small_array if small_array is within big_array, else -1
+    """
+    small_array_len = len(small_array)
+    cut_off = len(big_array) - small_array_len
+    for i, elem in enumerate(big_array):
+        if i <= cut_off:
+            if elem == small_array[0]:
+                if big_array[i:i+small_array_len] == small_array:
+                    return i
+        else:
+            break
+
     return -1
 
 
@@ -127,7 +135,7 @@ def convert_text_to_tokens(data, vocab, tokenize_fn):
 
     return token_seqs
 
-def build_pretraining_triples(data, vocab, tokenize_fn):
+def build_synthetic_pretraining_triples(data, vocab, tokenize_fn):
     """
         As per the NExT paper, we build a pre-training dataset from a dataset of unlabeled text.
         The process is as follows per sequence of text (Seq):
@@ -172,28 +180,47 @@ def build_pretraining_triples(data, vocab, tokenize_fn):
     
     return token_seqs, queries, labels
 
-def build_variable_length_text_dataset(data, vocab, split_name, save_string):
+def build_real_pretraining_triples(sentences, queries, vocab, tokenize_fn):
     """
-        Given a split of data (train, dev, test) this function builds a PreTrainingFindModuleDataset and saves
-        it to disk. A VariableLegnthTextDataset object handles batching sequences together and ensuring
-        every input is of the same length (the length of the max sequence length in a batch).
+        To evaluate a model against real explanations
 
         Arguments:
-            data              (arr) : split of data that needs to be processed
-            vocab (torchtext.vocab) : vocab object used for conversion between text token and token_id
-            split_name        (str) : name of split (used for naming)
-            save_string       (str) : string to indicate some of the hyper-params used to create the vocab
+            sentences (arr) : original sentences that an explanation is about
+            queries   (arr) : queries from explanations
+            vocab (torchtext.vocab) : vocabulary object
+            tokenize_fun (function) : function to use to break up text into tokens
+        
+        Returns:
+            tokenized seqs, queries, labels : triplet where each element is a list of equal length
+                                              containing similar information to `build_synthetic_pretraining_triples`
     """
-    pad_idx = vocab["<pad>"]
-    token_seqs, queries, labels = build_pretraining_triples(data, vocab, tokenize)
-    dataset = PreTrainingFindModuleDataset(token_seqs, queries, labels, pad_idx)
-
-    print("Finished building {} dataset of size: {}".format(split_name, str(len(token_seqs))))
-
-    file_name = "../data/pre_train_data/{}_data_{}.p".format(split_name, save_string)
-
-    with open(file_name, "wb") as f:
-        pickle.dump(dataset, f)
+    tokenized_sentences = convert_text_to_tokens(sentences, vocab, tokenize)
+    tokenized_queries = convert_text_to_tokens(queries, vocab, tokenize)
+    labels = []
+    indices_to_delete = []
+    for i, tokenized_sentence in enumerate(tokenized_sentences):
+        # tokenized_sentences[i] = [vocab["<bos>"]] + tokenized_sentence + [vocab["<eos>"]]
+        # padded_tokenized_sentence = tokenized_sentences[i]
+        tokenized_query = tokenized_queries[i]
+        # sent_labels = [0] * len(padded_tokenized_sentence)
+        sent_labels = [0] * len(tokenized_sentence)
+        # start_position = find_array_start_position(padded_tokenized_sentence, tokenized_query)
+        start_position = find_array_start_position(tokenized_sentence, tokenized_query)
+        if start_position > 0:
+            sent_labels[start_position:start_position+len(tokenized_query)] = [1] * len(tokenized_query)
+            # tokenized_queries[i] = [vocab["<bos>"]] + tokenized_query + [vocab["<eos>"]]
+            labels.append(sent_labels)
+        else:
+            indices_to_delete.append(i)
+    
+    indices_to_delete.reverse()
+    
+    for i in indices_to_delete:
+        del tokenized_sentences[i]
+        del tokenized_queries[i]
+            
+    
+    return tokenized_sentences, tokenized_queries, labels
 
 def extract_queries_from_explanations(explanation):
     """
@@ -222,6 +249,29 @@ def extract_queries_from_explanations(explanation):
         return possible_queries
 
     return []
+
+def build_variable_length_text_dataset(data, vocab, split_name, save_string):
+    """
+        Given a split of data (train, dev, test) this function builds a PreTrainingFindModuleDataset and saves
+        it to disk. A VariableLegnthTextDataset object handles batching sequences together and ensuring
+        every input is of the same length (the length of the max sequence length in a batch).
+
+        Arguments:
+            data              (arr) : split of data that needs to be processed
+            vocab (torchtext.vocab) : vocab object used for conversion between text token and token_id
+            split_name        (str) : name of split (used for naming)
+            save_string       (str) : string to indicate some of the hyper-params used to create the vocab
+    """
+    pad_idx = vocab["<pad>"]
+    token_seqs, queries, labels = build_synthetic_pretraining_triples(data, vocab, tokenize)
+    dataset = PreTrainingFindModuleDataset(token_seqs, queries, labels, pad_idx)
+
+    print("Finished building {} dataset of size: {}".format(split_name, str(len(token_seqs))))
+
+    file_name = "../data/pre_train_data/{}_data_{}.p".format(split_name, save_string)
+
+    with open(file_name, "wb") as f:
+        pickle.dump(dataset, f)
 
 
 def build_query_dataset(explanation_data, vocab, label_filter, save_string):
@@ -265,8 +315,48 @@ def build_query_dataset(explanation_data, vocab, label_filter, save_string):
     with open(file_name, "wb") as f:
         pickle.dump({"queries" : tokenized_queries, "labels" : labels}, f)
 
+def build_real_query_dataset(explanation_data, vocab, label_filter, dataset_name, save_string):
+    """
+        As an evaluation set, we take an real natural language explanation and check if it has a
+        quoted phrase in it. If it does, then we build an evaluation based on the sentence the 
+        explanation is about. The evaluation is to see if the machine can detect the quoted phrase of
+        the explanation in the sentence its quoted from.
+
+        Arguments:
+            explanation_data  (arr) : array of natural language explanations for labeling decisions
+            vocab (torchtext.vocab) : vocab object used for conversion between text token and token_id
+            label_filter      (arr) : labels to consider when extracting queries from explanations
+                                      (allows user to ignore explanations associated with certain labels)
+            dataset_name      (str) : original dataset name, indicating what these explanations are
+                                      associated with
+            save_string       (str) : string to indicate some of the hyper-params used to create the vocab 
+    """
+    sentences = []
+    queries = []
+    for entry in explanation_data:
+        sentence = entry["sent"]
+        explanation = entry["explanation"]
+        label = entry["label"]
+        if label_filter is None or label in label_filter:
+            possible_queries = extract_queries_from_explanations(explanation)
+            for query in possible_queries:
+                queries.append(query)
+                sentences.append(sentence)
+    
+    output = build_real_pretraining_triples(sentences, queries, vocab, tokenize)
+
+    tokenized_sentences, tokenized_queries, labels = output
+    
+    eval_dataset_2 = PreTrainingFindModuleDataset(tokenized_sentences, tokenized_queries, labels, vocab["<pad>"])
+
+    file_name = "../data/pre_train_data/{}_rq_data_{}.p".format(dataset_name, save_string)
+
+    with open(file_name, "wb") as f:
+        pickle.dump(eval_dataset_2, f)
+
 def build_pre_train_find_datasets(file_path, explanation_path, embedding_name="glove.840B.300d",
-                                  random_state=42, label_filter=None, sample_rate=0.1):
+                                  random_state=42, label_filter=None, sample_rate=0.1,
+                                  dataset="tacred"):
     """
         As per the NExT paper, we build train, dev and test datasets to allow for the pre-training and
         evaluation of the FIND module.
@@ -287,6 +377,8 @@ def build_pre_train_find_datasets(file_path, explanation_path, embedding_name="g
             label_filter     (arr) : labels to consider when extracting queries from explanations
                                      (allows user to ignore explanations associated with certain labels)
             sample_rate    (float) : percentage of unlabeled data to use when building datasets for L_find
+            dataset          (str) : name of the dataset explanations come from
+
     """
     if not embedding_name in possible_embeddings:
         print("Not Valid Embedding Option")
@@ -317,8 +409,11 @@ def build_pre_train_find_datasets(file_path, explanation_path, embedding_name="g
 
     build_query_dataset(explanation_data, vocab, label_filter, save_string)
 
+    build_real_query_dataset(explanation_data, vocab, label_filter, dataset, save_string)
+
 def build_pre_train_find_datasets_from_splits(train_path, dev_path, test_path, explanation_path,
-                                              embedding_name="glove.840B.300d", label_filter=None, sample_rate=-1.0):
+                                              embedding_name="glove.840B.300d", label_filter=None, sample_rate=-1.0,
+                                              dataset="tacred"):
     """
         Provided pre-split data, follow the steps taken in build_pre_train_find_datasets
 
@@ -333,6 +428,7 @@ def build_pre_train_find_datasets_from_splits(train_path, dev_path, test_path, e
             label_filter     (arr) : labels to consider when extracting queries from explanations
                                      (allows user to ignore explanations associated with certain labels)
             sample_rate    (float) : percentage of unlabeled data to use when building datasets for L_find
+            dataset          (str) : name of the dataset explanations come from
     """
 
     with open(train_path) as f:
@@ -367,9 +463,12 @@ def build_pre_train_find_datasets_from_splits(train_path, dev_path, test_path, e
 
     build_query_dataset(explanation_data, vocab, label_filter, save_string)
 
-def build_pre_train_find_datasets_ziqi(train_path, explanation_path, embedding_name="glove.840B.300d", label_filter=None, train_count=40000, test_count=2000):
+    build_real_query_dataset(explanation_data, vocab, label_filter, dataset, save_string)
+
+def build_pre_train_find_datasets_ziqi(train_path, explanation_path, embedding_name="glove.840B.300d",
+                                       label_filter=None, train_count=40000, test_count=2000, dataset="tacred"):
     """
-        Following Conversations with Ziqi, prepping data in a new way
+        Following Conversations with Ziqi (original author), prepping data in a new way
 
         Arguments:
             train_path       (str) : path to training split of data
@@ -379,6 +478,7 @@ def build_pre_train_find_datasets_ziqi(train_path, explanation_path, embedding_n
                                      (allows user to ignore explanations associated with certain labels)
             train_count      (int) : how much of the train data should be used for training
             test_count       (int) : how much of the train data should be used for eval
+            dataset          (str) : name of the dataset explanations come from
     """
 
     with open(train_path) as f:
@@ -404,41 +504,10 @@ def build_pre_train_find_datasets_ziqi(train_path, explanation_path, embedding_n
     with open(explanation_path) as f:
         explanation_data = json.load(f)
     
-    sentences = []
-    queries = []
-    for entry in explanation_data:
-        sentence = entry["sent"]
-        explanation = entry["explanation"]
-        label = entry["label"]
-        if label_filter is None or label in label_filter:
-            possible_queries = extract_queries_from_explanations(explanation)
-            for query in possible_queries:
-                queries.append(query)
-                sentences.append(sentence)
-    
-    tokenized_sentences = convert_text_to_tokens(sentences, vocab, tokenize)
-    tokenized_queries = convert_text_to_tokens(queries, vocab, tokenize)
-    labels = []
-    for i, tokenized_sentence in enumerate(tokenized_sentences):
-        # tokenized_sentences[i] = [vocab["<bos>"]] + tokenized_sentence + [vocab["<eos>"]]
-        # padded_tokenized_sentence = tokenized_sentences[i]
-        tokenized_query = tokenized_queries[i]
-        # sent_labels = [0] * len(padded_tokenized_sentence)
-        sent_labels = [0] * len(tokenized_sentence)
-        # start_position = find_array_start_position(padded_tokenized_sentence, tokenized_query)
-        start_position = find_array_start_position(tokenized_sentence, tokenized_query)
-        sent_labels[start_position:start_position+len(tokenized_query)] = [1] * len(tokenized_query)
-        # tokenized_queries[i] = [vocab["<bos>"]] + tokenized_query + [vocab["<eos>"]]
-        labels.append(sent_labels)
-    
-    eval_dataset_2 = PreTrainingFindModuleDataset(tokenized_sentences, tokenized_queries, labels, vocab["<pad>"])
-
-    file_name = "../data/pre_train_data/{}_data_{}.p".format("ziqi_test_2", save_string)
-
-    with open(file_name, "wb") as f:
-        pickle.dump(eval_dataset_2, f)
     
     build_query_dataset(explanation_data, vocab, label_filter, save_string)
+
+    build_real_query_dataset(explanation_data, vocab, label_filter, dataset, save_string)
 
 def similarity_loss_function(pos_scores, neg_scores):
     """
