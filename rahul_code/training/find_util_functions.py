@@ -43,7 +43,6 @@ def find_array_start_position(big_array, small_array):
 
     return -1
 
-
 def generate_save_string(embedding_name, random_state=-1, sample=-1.0):
     """
         To allow for multiple datasets to exist at once, we add this string to identify which dataset a run

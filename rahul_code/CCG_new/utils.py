@@ -3,22 +3,59 @@ import string
 from CCG_new import constants
 from CCG_new import util_classes
 
-# this can't handle apostraphe's within the text
-def normalize_quotes(text):
+def _find_quoted_phrases(explanation):
     """
-        Converts Various possible quote characters to a single " character
-
+        Checks for the existence of a quoted phrase within an explanation
+        Three types of quotes are accepted
+        
         Arguments:
-            text (str) : text to be normalized
+            explanation (str) : explanation text for a labeling decision
         
         Returns:
-            str : normalized text
+            arr : an array of quoted phrases or an empty array
     """
+    possible_queries = re.findall('"[^"]+"', explanation)
+    if len(possible_queries):
+        possible_queries = [query for query in possible_queries]
+        return possible_queries
+    
+    possible_queries = re.findall("'[^']+'", explanation)
+    if len(possible_queries):
+        possible_queries = [query for query in possible_queries]
+        return possible_queries
 
-    text = re.sub("\'", "\"", text)
-    text = re.sub("`", "\"", text)
-    text = re.sub(r"\"{2,}", "\"", text)
-    return text
+    possible_queries = re.findall("`[^`]+`", explanation)
+    if len(possible_queries):
+        possible_queries = [query for query in possible_queries]
+        return possible_queries
+    
+    return []
+
+def segment_explanation(explanation):
+    """
+        Segments an explanation into portions that have a quoted phrase and those that don't
+        Prepends the quoted word segments with an asterisk to indicate the existences of a quoted phrase
+
+        Arguments:
+            explanation (str) : raw explanation text
+        
+        Returns:
+            arr : segmented explanation
+    """
+    possible_queries = _find_quoted_phrases(explanation)
+    pieces = []
+    last_end_position = 0
+    for query in possible_queries:
+        start_position = explanation.find(query)
+        piece = explanation[last_end_position:start_position]
+        last_end_position = start_position + len(query)
+        pieces.append(piece)
+        pieces.append("*"+query)
+    
+    if last_end_position < len(explanation):
+        pieces.append(explanation[last_end_position:])
+    
+    return pieces
 
 def clean_text(text, lower=True, collapse_punc=True, commas=True, switch_amp=True, exclusive=True, whitespace=True):
     """
@@ -71,21 +108,16 @@ def clean_explanation(explanation):
         Returns:
             str : cleaned text
     """
-    explanation = normalize_quotes(explanation)
-    if "\"" in explanation:
-        explanation = explanation.replace(" \"", " \"*")
-        parts = explanation.split("\"")
-        cleaned_explanation = ""
-        for i, part in enumerate(parts):
-            if not part.startswith("*"):
-                cleaned_explanation = cleaned_explanation + " " + clean_text(parts[i])
-            else:
-                cleaned_explanation = cleaned_explanation + " \"" + part[1:].lower() + "\""
-        explanation = cleaned_explanation.strip()
-    else:
-        explanation = clean_text(explanation)
+    segments = segment_explanation(explanation)
+    for i, segment in enumerate(segments):
+        if segment[0] != "*":
+            segments[i] = clean_text(segment)
+        else:
+            segments[i] = "\"" + segment[2:len(segment)-1].lower() + "\""
     
-    return explanation
+    cleaned_explanation = " ".join(segments).strip()
+
+    return cleaned_explanation
 
 def convert_chunk_to_terminal(chunk):
     """
@@ -295,7 +327,7 @@ def create_semantic_repr(parse_tree):
     """
     full_semantics = str(parse_tree.label()[0].semantics())
     # Possible clause delimiter
-    clauses = re.split(',|(\()',full_semantics)
+    clauses = re.split(',|(\\()',full_semantics)
     delete_index = []
     for i in range(len(clauses)-1, -1, -1):
         if clauses[i] == None:

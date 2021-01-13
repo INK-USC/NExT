@@ -5,11 +5,42 @@ from CCG_new import utils
 
 nlp = spacy.load("en_core_web_sm")
 
-def test_normalize_quotes():
-    inputs = ["'abc'", "`bcd`", "\"`'bdc'`\""]
-    outputs = ["\"abc\"", "\"bcd\"", "\"bdc\""]
-    for i, inp in enumerate(inputs):
-        assert utils.normalize_quotes(inp) == outputs[i]
+def test_find_quoted_phrases():
+    text = 'First type of "query"'
+
+    assert ['"query"'] == utils._find_quoted_phrases(text)
+
+    text = 'Another "type" of "query"'
+
+    assert ['"type"', '"query"'] == utils._find_quoted_phrases(text)
+
+    text = 'Ideally all explanations will only use "double quote\'s", so we can avoid issues with "\'"'
+
+    assert ['"double quote\'s"', '"\'"'] == utils._find_quoted_phrases(text)
+
+    text = "An explanation can use 'single quotes'"
+
+    assert ["'single quotes'"] == utils._find_quoted_phrases(text)
+
+    text = "However, there can be some problems with 'apostrophes like, 's'"
+
+    assert ["'apostrophes like, '"] == utils._find_quoted_phrases(text)
+
+    text = "We can even handle ''double single quotes too''"
+
+    assert ["'double single quotes too'"] == utils._find_quoted_phrases(text)
+
+    text = "Though do \"not\" mix 'quotes'"
+
+    assert ['"not"'] == utils._find_quoted_phrases(text)
+
+    text = "Finally we also handle `backticks as quotes`"
+
+    assert ["`backticks as quotes`"] == utils._find_quoted_phrases(text)
+
+    text = "No quotes here though, so should be empty"
+
+    assert [] == utils._find_quoted_phrases(text)
     
 def test_clean_text():
     text = "Rahul"
@@ -20,22 +51,35 @@ def test_clean_text():
     assert utils.clean_text(text) == "rahul, what if i want to keep punctuation."
     assert utils.clean_text(text, collapse_punc=False, exclusive=False) == "rahul, what if i want to keep punctuation!?!?!?."
     
-    text = "RAHUL,,,,, why did you leave!?!?!?!."
-    assert utils.clean_text(text) == "rahul, why did you leave."
-    assert utils.clean_text(text, commas=False) == "rahul,,,,, why did you leave."
+    text = "RAHUL,,,,, why did you break it!?!?!?!."
+    assert utils.clean_text(text) == "rahul, why did you break it."
+    assert utils.clean_text(text, commas=False) == "rahul,,,,, why did you break it."
 
     text = "Rahul, maybe its a good idea to drink more water & less coffee."
     assert utils.clean_text(text) == "rahul, maybe its a good idea to drink more water and less coffee."
     assert utils.clean_text(text, switch_amp=False, exclusive=False) == "rahul, maybe its a good idea to drink more water & less coffee."
 
-    text = "RahUL, look it's a tweet #hashtags @username could be USEFUL, but we also loose tokens like $%^"
-    assert utils.clean_text(text) ==  "rahul, look it's a tweet hashtags username could be useful, but we also loose tokens like"
-    assert utils.clean_text(text, exclusive=False) == "rahul, look it's a tweet #hashtags @username could be useful, but we also loose tokens like $%^"
+    text = "RahUL, look it's a tweet #hashtags @username could be USEFUL, but we also lose tokens like $%^"
+    assert utils.clean_text(text) ==  "rahul, look it's a tweet hashtags username could be useful, but we also lose tokens like"
+    assert utils.clean_text(text, exclusive=False) == "rahul, look it's a tweet #hashtags @username could be useful, but we also lose tokens like $%^"
     
     text = "Rahul    sometimes there is like    weird   whitespace!"
     assert utils.clean_text(text) == "rahul sometimes there is like weird whitespace."
     assert utils.clean_text(text, whitespace=False) == "rahul    sometimes there is like    weird   whitespace."
 
+def test_segment_explanation():
+    text = 'First type of "query"'
+
+    assert ["First type of ", "*\"query\""] == utils.segment_explanation(text)
+
+    text = 'Another "type" of "query"'
+
+    assert ["Another ", "*\"type\"", " of ", "*\"query\""] == utils.segment_explanation(text)
+
+    text = 'No queries here'
+
+    assert ["No queries here"] == utils.segment_explanation(text)
+    
 def test_clean_explanation():
     explanation = "The tweet contains the phrase 'cheery smile'"
     assert utils.clean_explanation(explanation) == "the tweet contains the phrase \"cheery smile\""
@@ -45,6 +89,7 @@ def test_clean_explanation():
 
     explanation = "The tweet contains some funky characters like '$$$!!!@@#()#)$*$' & BETWEEN SUBJ AND OBJ THERE are four Words"
     assert utils.clean_explanation(explanation) == "the tweet contains some funky characters like \"$$$!!!@@#()#)$*$\" and between subj and obj there are four words"
+
     
 def test_convert_chunk_to_terminal():
     terminal_chunks = ["not", "n\"t", "n't", "number", "/"]
