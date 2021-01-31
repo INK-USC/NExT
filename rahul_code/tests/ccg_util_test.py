@@ -1,6 +1,7 @@
 import spacy
 import sys
 sys.path.append("../")
+sys.path.append("../CCG_new/")
 from CCG_new import utils
 
 nlp = spacy.load("en_core_web_sm")
@@ -145,9 +146,9 @@ def test_prepare_token_for_rule_addition():
 
 def test_generate_phrase():
     sentence = "His wife, OBJ-PERSON, often accompanied him on SUBJ-PERSON SUBJ-PERSON expeditions, as she did in 1947, when she became the first woman to climb Mount McKinley"
-    phrase_tokens = ['His', 'wife', ',', 'OBJ-PERSON', ',', 'often', 'accompanied', 'him', 'on', 'SUBJ-PERSON', 'expeditions', ',', 'as', 'she', 'did', 'in', '1947', ',', 'when', 'she', 'became', 'the', 'first', 'woman', 'to', 'climb', 'Mount', 'McKinley']
+    phrase_tokens = ['His', 'wife', ',', 'OBJ', ',', 'often', 'accompanied', 'him', 'on', 'SUBJ', 'expeditions', ',', 'as', 'she', 'did', 'in', '1947', ',', 'when', 'she', 'became', 'the', 'first', 'woman', 'to', 'climb', 'Mount', 'McKinley']
     # the last two NER labels are wrong, but are the output of spaCy's NER tagger.
-    phrase_ners = ['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'DATE', '', '', '', '', '', 'ORDINAL', '', '', '', 'PERSON', 'PERSON']
+    phrase_ners = ['', '', '', 'PERSON', '', '', '', '', '', 'PERSON', '', '', '', '', '', '', 'DATE', '', '', '', '', '', 'ORDINAL', '', '', '', 'PERSON', 'PERSON']
     phrase_subj_posi = 9
     phrase_obj_posi = 3
     phrase = utils.generate_phrase(sentence, nlp)
@@ -158,8 +159,8 @@ def test_generate_phrase():
     assert phrase.obj_posi == phrase_obj_posi
 
     sentence = "SUBJ-PERSON's mother OBJ-PERSON was a singer in the dance group Soul II Soul, which had hits in the 1980s and 1990s."
-    phrase_tokens = ['SUBJ-PERSON', "'s", 'mother', 'OBJ-PERSON', 'was', 'a', 'singer', 'in', 'the', 'dance', 'group', 'Soul', 'II', 'Soul', ',', 'which', 'had', 'hits', 'in', 'the', '1980s', 'and', '1990s', '.']
-    phrase_ners = ['', '', '', '', '', '', '', '', '', '', '', 'PRODUCT', 'PRODUCT', 'PRODUCT', '', '', '', '', '', '', 'DATE', '', 'DATE', '']
+    phrase_tokens = ['SUBJ', "'s", 'mother', 'OBJ', 'was', 'a', 'singer', 'in', 'the', 'dance', 'group', 'Soul', 'II', 'Soul', ',', 'which', 'had', 'hits', 'in', 'the', '1980s', 'and', '1990s', '.']
+    phrase_ners = ['PERSON', '', '', 'PERSON', '', '', '', '', '', '', '', 'PRODUCT', 'PRODUCT', 'PRODUCT', '', '', '', '', '', '', 'DATE', '', 'DATE', '']
     phrase_subj_posi = 0
     phrase_obj_posi = 3
     phrase = utils.generate_phrase(sentence, nlp)

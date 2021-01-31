@@ -1,4 +1,4 @@
-from CCG.constant import *
+# from CCG.constant import *
 from functools import reduce
 import tensorflow as tf
 

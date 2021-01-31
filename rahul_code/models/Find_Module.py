@@ -19,11 +19,11 @@ class Find_Module(nn.Module):
             3. weight of 20 used in BCELoss, original = 1
             4. Clip gradients to magnitude of 1.0, original = 5.0
         
-        Training Script can be found here: [Fill this in]
+        Training Script can be found here: https://github.com/Rahul-Khanna/NExT/blob/master/rahul_code/training/pre_train_find_module.py
     """
     def __init__(self, emb_weight, padding_idx, emb_dim, hidden_dim, cuda,
                  n_layers=2, encoding_dropout=0.1, sliding_win_size=3,
-                 padding_score=-1e30):
+                 padding_score=-1e30, add_subj_obj=True):
         """
             Arguments:
                 emb_weight (torch.tensor) : created vocabulary's vector representation for each token, where
@@ -52,6 +52,11 @@ class Find_Module(nn.Module):
         self.sliding_win_size = sliding_win_size
         self.number_of_cosines = sum([i+1 for i in range(self.sliding_win_size)])
         self.cuda = cuda
+
+        if add_subj_obj:
+            subj_vector = torch.randn(1, emb_dim)
+            obj_vector = torch.randn(1, emb_dim)
+            emb_weight = torch.cat([emb_weight, subj_vector, obj_vector], dim=0)
 
         self.embeddings = nn.Embedding.from_pretrained(emb_weight, freeze=False, padding_idx=self.padding_idx)
         self.encoding_bilstm = nn.LSTM(self.emb_dim, self.hidden_dim, num_layers=n_layers,
@@ -178,7 +183,7 @@ class Find_Module(nn.Module):
                 (torch.tensor) : N x seq_len x 1, cosine similarity between each token's representation
                                     and the query vector
         """
-        normalized_token_rep = f.normalize(token_rep + + 1e-5, p=2, dim=2) # normalizing rows of each matrix in the batch
+        normalized_token_rep = f.normalize(token_rep + 1e-5, p=2, dim=2) # normalizing rows of each matrix in the batch
         cosine_sim = torch.matmul(normalized_token_rep, normalized_query_vectors) # N x seq_len x 1
         
         return cosine_sim
@@ -302,7 +307,7 @@ class Find_Module(nn.Module):
         trigram_pooled_reps = torch.reshape(trigram_pooled_reps, needed_size).squeeze(2) # batch_size x (seq_len+2) x encoding_dim
 
         return trigram_pooled_reps
-    
+        
     def compute_unigram_similarities(self, seq_embs, normalized_query_vectors):
         """
             Compute similarities between unigram representations and pooled query representations
@@ -429,12 +434,73 @@ class Find_Module(nn.Module):
                                           bwd_bigram_hs_cosine,
                                           fwd_trigram_hs_cosine,
                                           mid_trigram_hs_cosine,
-                                          bwd_trigram_hs_cosine), 2) # combined_cosines = N x seq_len x sliding_win_size
+                                          bwd_trigram_hs_cosine), 2) # combined_cosines = N x seq_len x number_of_cosines
 
-            encoded_cosines, _ = self.cosine_bilstm(combined_cosines)
+            encoded_cosines, _ = self.cosine_bilstm(combined_cosines) # N x seq_len x 64
             encoded_cosines = self.encoding_dropout(encoded_cosines)
             
-            similarity_scores = self.similarity_head(encoded_cosines)
+            similarity_scores = self.similarity_head(encoded_cosines) # N x seq_len x 1
+            
+            return similarity_scores
+        
+    def train_get_similarity(self, seq_embeddings, padding_indexes, query_vectors):
+        """
+            Compute similarity between each token in a sequence and the corresponding query_vector per the
+            NExT paper's specification. Steps followed:
+                1. Get a token's encoder representation (unigram)
+                2. Construct pooled representation for the bigrams that include a given token
+                3. Construct pooled representation for the trigrams that include a given token
+                4. Compute dot product between query vector and a tokens's encoder representation
+                5. Compute dot product between query vector and bigrams that include a given token
+                6. Compute dot product between query vector and trigrams that include a given token
+                7. Compute a similarity vector containing the cosine between the token and a query using
+                   all 6 representations
+                8. Send cosine vectors through a bi-lstm
+                9. Send output of bi-lstm through MLP head to produce final matching score
+            
+            Arguments:
+                seq_embeddings  (torch.tensor) : N x seq_len x embedding_dim
+                padding_indexes (torch.tensor) : N x seq_len
+                query_vectors   (torch.tensor) : Q x 1 x encoding_dim
+            
+            Returns:
+                (torch.tensor) : N x seq_len x 1
+        """        
+        batch_size, seq_len, _ = seq_embeddings.shape
+        number_of_queries, _, _ = query_vectors.shape
+
+        normalized_query_vectors = f.normalize(query_vectors + 1e-5, p=2, dim=2)
+        normalized_query_vectors = normalized_query_vectors.permute(2, 0, 1).squeeze(2) # arranging query_vectors to be encoding_dim x Q
+        
+        if self.sliding_win_size == 3:
+            unigram_reps = self._build_unigram_hidden_states(seq_embeddings) # N x seq_len x encoding_dim
+            bigram_reps = self._build_bigram_hidden_states(seq_embeddings, padding_indexes) # batch_size x (seq_len+1) x encoding_dim
+            fwd_bigram_reps = bigram_reps[:,1:,:] # batch_size x seq_len x encoding_dim
+            bwd_bigram_reps = bigram_reps[:,:seq_len,:] # batch_size x seq_len x encoding_dim
+            trigram_reps = self._build_trigram_hidden_states(seq_embeddings, padding_indexes) # batch_size x (seq_len+2) x encoding_dim
+            fwd_trigram_reps = trigram_reps[:,2:,:] # batch_size x seq_len x encoding_dim
+            mid_trigram_reps = trigram_reps[:,1:seq_len+1,:] # batch_size x seq_len x encoding_dim
+            bwd_trigram_reps = trigram_reps[:,:seq_len,:] # batch_size x seq_len x encoding_dim
+
+            reps = torch.cat((unigram_reps,
+                              fwd_bigram_reps,
+                              bwd_bigram_reps,
+                              fwd_trigram_reps,
+                              mid_trigram_reps,
+                              bwd_trigram_reps), 1) # combined_cosines = N x seq_len*number_of_cosines x encoding_dim
+            
+            reps = torch.reshape(reps, (batch_size, self.number_of_cosines, seq_len, self.encoding_dim))
+
+            normalized_reps = f.normalize(reps + 1e-5, p=2, dim=3)
+
+            all_cosines = torch.matmul(normalized_reps, normalized_query_vectors).permute(3, 0, 2, 1) # Q x N x seq_len x number_of_cosines
+
+            encoded_cosines = torch.cat([self.cosine_bilstm(query_cosine)[0] for query_cosine in all_cosines], dim=0) # Q*N x seq_len x 64
+            encoded_cosines = self.encoding_dropout(encoded_cosines)
+            
+            similarity_scores = self.similarity_head(encoded_cosines).squeeze(2) # Q*N x seq_len
+
+            similarity_scores = torch.reshape(similarity_scores, (number_of_queries, batch_size , seq_len)) # Q x N x seq_len
             
             return similarity_scores
         
@@ -462,11 +528,11 @@ class Find_Module(nn.Module):
         pooled_query_encodings = self.attention_pooling(query_encodings, query_padding_indexes) # N x 1 x encoding_dim
         seq_similarities = self.pre_train_get_similarity(seq_embeddings, seq_padding_indexes, pooled_query_encodings).squeeze(2) # N x seq_len
 
-        seq_similarities = torch.maximum(seq_similarities, lower_bound)
+        seq_similarities = torch.clamp(seq_similarities, min=lower_bound)
 
         return seq_similarities
 
-    def sim_forward(self, queries, query_index_matrix, neg_query_index_matrix, zeroes, tau=0.9):
+    def sim_forward(self, queries, query_index_matrix, neg_query_index_matrix, tau=0.9):
         """
             Forward function for computing L_sim when pre-training Find Module
 
@@ -478,7 +544,6 @@ class Find_Module(nn.Module):
                 queries                (torch.tensor) : N x seq_len, token sequences each query
                 query_index_matrix     (torch.tensor) : N x N, indicates per query the queries that share the same label
                 neg_query_index_matrix (torch.tensor) : N x N, indicates per query the queries that don't share the same label
-                zeroes                 (torch.tensor) : N x N, lower bound of zero for similarity scores
                 tau            (float) : constant used in NExT paper
             
             Returns:
@@ -499,12 +564,38 @@ class Find_Module(nn.Module):
 
         query_similarities = torch.mm(pooled_query, pooled_query_d) # N x N
 
-        query_pos_similarities = torch.square(torch.maximum(tau - query_similarities, zeroes))
-        query_neg_similarities = torch.square(torch.maximum(query_similarities, zeroes))
+        query_pos_similarities = torch.square(torch.clamp(tau - query_similarities, min=0.0))
+        query_neg_similarities = torch.square(torch.clamp(query_similarities, min=0.0))
 
         pos_scores = torch.max(query_pos_similarities - 1e30*neg_query_index_matrix, axis=1).values
-        pos_scores = torch.maximum(pos_scores, zeroes) # incase a class only has one example, no loss
+        pos_scores = torch.clamp(pos_scores, min=0.0) # incase a class only has one example, no loss
         neg_scores = torch.max(query_neg_similarities - 1e30*query_index_matrix, axis=1).values
-        neg_scores = torch.maximum(neg_scores, zeroes)
+        neg_scores = torch.clamp(neg_scores, min=0.0)
 
         return pos_scores, neg_scores
+    
+    def soft_matching_forward(self, seqs, queries, lower_bound):
+        """
+            Forward function for computing similarity between each token in a sequence to each query
+
+            Arguments:
+                seqs        (torch.tensor) : N x seq_len_i, token sequences for current batch
+                queries     (torch.tensor) : Q x seq_len_j, token sequences for queries
+                lower_bound        (float) : lower_bound for token similarity score
+            Returns:
+                tup(torch.tensor) : N x seq_len_i x Q, N x seq_len_i; similarity scores between each token in a
+                                    sequence and each query, along with an indication of padding indices
+        """
+        query_encodings, query_padding_indexes = self.encode_tokens(queries) # Q x seq_len_j x encdoing_dim, Q x seq_len_j
+        seq_embeddings, seq_padding_indexes = self.get_embeddings(seqs) # N x seq_len_i x embedding_dim, N x seq_len_i
+
+        if self.cuda:
+            device = torch.device("cuda")
+            query_padding_indexes = query_padding_indexes.to(device)
+
+        pooled_query_encodings = self.attention_pooling(query_encodings, query_padding_indexes) # Q x 1 x encoding_dim
+        seq_similarities = self.train_get_similarity(seq_embeddings, seq_padding_indexes, pooled_query_encodings) # Q x N x seq_len
+
+        seq_similarities = torch.clamp(seq_similarities, min=lower_bound)
+
+        return seq_similarities, seq_padding_indexes

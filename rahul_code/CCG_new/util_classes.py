@@ -1,4 +1,4 @@
-
+import pdb
 def tokens_to_string(tokens):
     return " ".join(tokens)
 
@@ -48,43 +48,44 @@ class Phrase():
         self.subj_posi = subj_posi
         self.obj_posi = obj_posi
         self.sentence = tokens_to_string(tokens)
-        if subj_posi:
+        if subj_posi != None:
             self.subj = self.tokens[self.subj_posi]
         else:
             self.subj = None
-        if obj_posi:
+        if obj_posi != None:
             self.obj = self.tokens[self.obj_posi]
         else:
             self.obj = None
     
     def get_mid(self):
-        if self.subj_posi and self.obj_posi:
+        if self.subj_posi != None and self.obj_posi != None:
             st = min(self.subj_posi,self.obj_posi)+1
             ed = max(self.subj_posi,self.obj_posi)
             midphrase = tokens_to_string(self.tokens[st:ed])
-            midners = self.ner[st:ed]
+            midners = self.ners[st:ed]
             # rename word to phrase
-            return {'word':midphrase,'NER':midners,'tokens':self.token[st:ed],'position':(st,ed)}
-        
-        return {'word':"",'NER':[],'tokens':[],'position':(0,0)}
+            return {'word':midphrase,'NER':midners,'tokens':self.tokens[st:ed],'position':(st,ed)}
+        else:
+            pdb.set_trace()
+        return {'word':tokens_to_string(self.tokens),'NER':self.ners,'tokens':self.tokens,'position':(0,len(self.tokens))}
     
     def get_other_posi(self,LoR,XoY):
         assert LoR == 'Left' or LoR == 'Right' or LoR=='Range'
         assert XoY == 'X' or XoY == 'Y'
 
-        if self.subj_posi and self.obj_posi:
+        if self.subj_posi != None and self.obj_posi != None:
             if XoY == 'X':
                 split_posi = self.subj_posi
             else:
                 split_posi = self.obj_posi
 
             if LoR=='Left':
-                phrase = tokens_to_string(self.token[:split_posi])
+                phrase = tokens_to_string(self.tokens[:split_posi])
                 phrase_ner = self.ners[:split_posi]
                 phrase_tokens = self.tokens[:split_posi]
                 posi = (0,split_posi)
             elif LoR=='Right':
-                phrase = tokens_to_string(self.token[split_posi+1:])
+                phrase = tokens_to_string(self.tokens[split_posi+1:])
                 phrase_ner = self.ners[split_posi+1:]
                 phrase_tokens = self.tokens[split_posi+1:]
                 posi = (split_posi+1,len(self.tokens))
@@ -96,13 +97,13 @@ class Phrase():
 
             return {'word':phrase,'NER':phrase_ner,'tokens':phrase_tokens,'position':posi}
 
-        return {'word':"",'NER':[],'tokens':[],'position':(0,0)}
+        return {'word':tokens_to_string(self.tokens),'NER':self.ners,'tokens':self.tokens,'position':(0,len(self.tokens))}
 
     def with_(self,XoY,SoE,substring):
         assert XoY == 'X' or XoY == 'Y'
         assert SoE == 'starts' or SoE == 'ends'
 
-        if self.obj and self.obj:
+        if self.subj_posi != None and self.obj_posi != None:
             if XoY=='X':
                 word = self.subj
             else:
@@ -113,3 +114,12 @@ class Phrase():
             else:
                 return word.endswith(substring)
         return False
+    
+    def update_tokens_and_ners(self, tokens, ners):
+        self.tokens = tokens
+        self.ners = ners
+        if self.subj_posi != None:
+            self.subj = self.tokens[self.subj_posi]
+        if self.obj_posi != None:
+            self.obj = self.tokens[self.obj_posi]
+    

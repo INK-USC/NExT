@@ -4,11 +4,10 @@ from transformers import AdamW
 import sys
 sys.path.append(".")
 sys.path.append("../")
-from find_util_functions import build_pre_train_find_datasets_from_splits, \
-                                  similarity_loss_function, \
-                                  evaluate_find_module, \
-                                  generate_save_string
-from util_classes import PreTrainingFindModuleDataset
+from training.find_util_functions import build_pre_train_find_datasets_from_splits, \
+                                         evaluate_find_module
+from training.util_functions import similarity_loss_function, generate_save_string
+from training.util_classes import BaseVariableLengthDataset
 from models import Find_Module
 import pickle
 from tqdm import tqdm
@@ -53,7 +52,7 @@ def main():
                         type=float,
                         help="The initial learning rate for Adam.")
     parser.add_argument("--epochs",
-                        default=20,
+                        default=20, # will only train for 10, stopping criteria of 0.9 f1
                         type=int,
                         help="Number of Epochs for training")
     parser.add_argument('--embeddings',
@@ -82,6 +81,7 @@ def main():
                         help="where to save the model")
     parser.add_argument('--experiment_name',
                         type=str,
+                        default="official",
                         help="what to save the model file as")
     parser.add_argument('--load_model',
                         action='store_true',
@@ -99,6 +99,7 @@ def main():
     torch.manual_seed(args.seed)
     random.seed(args.seed)
     sample_rate = 0.6
+    lower_bound = -20.0
     dataset = "tacred"
 
     if args.build_pre_train:
@@ -169,7 +170,7 @@ def main():
     model = model.to(device)
 
     # Get L_sim Data ready
-    real_query_tokens = PreTrainingFindModuleDataset.variable_length_batch_as_tensors(sim_data["queries"], pad_idx)
+    real_query_tokens = BaseVariableLengthDataset.variable_length_batch_as_tensors(sim_data["queries"], pad_idx)
     real_query_tokens = real_query_tokens.to(device)
     query_labels = sim_data["labels"]
     
@@ -189,11 +190,9 @@ def main():
     neg_query_index_matrix = 1 - query_index_matrix
     for i, row in enumerate(neg_query_index_matrix):
         neg_query_index_matrix[i][i] = 1
-    zeroes = torch.tensor([0.0])
 
     query_index_matrix = query_index_matrix.to(device)
     neg_query_index_matrix = neg_query_index_matrix.to(device)
-    zeroes = zeroes.to(device)    
 
     # define the optimizer
     if args.use_adagrad:
@@ -218,15 +217,12 @@ def main():
 
             tokens, queries, labels = batch
 
-            lower_bound = torch.full(tokens.shape, -20.0)
-            lower_bound = lower_bound.to(device)
-
             # clear previously calculated gradients 
             model.zero_grad()        
 
             # get model predictions for the current batch
             token_scores = model.find_forward(tokens, queries, lower_bound)
-            pos_scores, neg_scores = model.sim_forward(real_query_tokens, query_index_matrix, neg_query_index_matrix, zeroes)
+            pos_scores, neg_scores = model.sim_forward(real_query_tokens, query_index_matrix, neg_query_index_matrix)
             
             # compute the loss between actual and predicted values
             find_loss = find_loss_function(token_scores, labels)
@@ -258,7 +254,7 @@ def main():
 
 
         print("Starting Primary Evaluation")
-        eval_results = evaluate_find_module(primary_eval_path, real_query_tokens, query_index_matrix, neg_query_index_matrix, zeroes,
+        eval_results = evaluate_find_module(primary_eval_path, real_query_tokens, query_index_matrix, neg_query_index_matrix, lower_bound,
                                             model, find_loss_function, sim_loss_function, args.eval_batch_size, args.gamma)
         dev_avg_loss, dev_avg_find_loss, dev_avg_sim_loss, dev_f1_score, total_og_scores, total_new_scores = eval_results
         print("Finished Primary Evaluation")
@@ -284,7 +280,7 @@ def main():
         
         if len(secondary_eval_path) > 0:
             print("Starting Secondary Evaluation")
-            eval_results = evaluate_find_module(secondary_eval_path, real_query_tokens, query_index_matrix, neg_query_index_matrix, zeroes,
+            eval_results = evaluate_find_module(secondary_eval_path, real_query_tokens, query_index_matrix, neg_query_index_matrix, lower_bound,
                                                 model, find_loss_function, sim_loss_function, args.eval_batch_size, args.gamma)
             dev_2_avg_loss, dev_2_avg_find_loss, dev_2_avg_sim_loss, dev_2_f1_score, total_og_scores, total_new_scores = eval_results
             print("Finished Secondary Evaluation")

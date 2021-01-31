@@ -1,6 +1,6 @@
 import sys
 sys.path.append("../training/")
-from util_classes import PreTrainingFindModuleDataset
+from util_classes import PreTrainingFindModuleDataset, BaseVariableLengthDataset, TrainingDataset
 import torch
 
 tokens = [
@@ -25,7 +25,7 @@ queries = [
         [25]
 ]
 
-labels = [
+pretrain_labels = [
     [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0],
     [0.0, 1.0, 1.0, 1.0, 0.0, 0.0],
     [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
@@ -36,22 +36,24 @@ labels = [
     [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 ]
 
+strict_match_labels = [1, 2, 4, 3, 5, 3, 2, 1]
+
 def test_variable_length_batch_as_tensors():
-    padded_tokens = PreTrainingFindModuleDataset.variable_length_batch_as_tensors(tokens, 0)
+    padded_tokens = BaseVariableLengthDataset.variable_length_batch_as_tensors(tokens, 0)
     assert padded_tokens.shape[0] == 8
     assert padded_tokens.shape[1] == 26
     
-    padded_queries = PreTrainingFindModuleDataset.variable_length_batch_as_tensors(queries, 0)
+    padded_queries = BaseVariableLengthDataset.variable_length_batch_as_tensors(queries, 0)
     assert padded_queries.shape[0] == 8
     assert padded_queries.shape[1] == 5
 
-    padded_labels = PreTrainingFindModuleDataset.variable_length_batch_as_tensors(labels, 0.0, torch.float)
+    padded_labels = BaseVariableLengthDataset.variable_length_batch_as_tensors(pretrain_labels, 0.0, torch.float)
     assert padded_labels.shape[0] == 8
     assert padded_labels.shape[1] == 26
 
 
-def test_as_batches_shuffle():
-    dataset = PreTrainingFindModuleDataset(tokens, queries, labels, 0)
+def test_pre_train_as_batches_shuffle():
+    dataset = PreTrainingFindModuleDataset(tokens, queries, pretrain_labels, 0)
 
     token_lengths = [19, 26, 13, 19]
     query_lengths = [4, 3, 5, 2]
@@ -67,12 +69,12 @@ def test_as_batches_shuffle():
         assert b_labels.shape[0] == 2
         assert b_labels.shape[1] == token_lengths[i]
 
-def test_as_batches_no_shuffle():
-    dataset = PreTrainingFindModuleDataset(tokens, queries, labels, 0)
+def test_pre_train_as_batches_no_shuffle():
+    dataset = PreTrainingFindModuleDataset(tokens, queries, pretrain_labels, 0)
 
     token_lengths = [10, 13, 26, 19]
     query_lengths = [3, 5, 4, 2]
-    for i, batch in enumerate(dataset.as_batches(batch_size=2, seed=0, shuffle=False)):
+    for i, batch in enumerate(dataset.as_batches(batch_size=2, shuffle=False)):
         b_tokens, b_queries, b_labels = batch
 
         assert b_tokens.shape[0] == 2
@@ -83,3 +85,27 @@ def test_as_batches_no_shuffle():
 
         assert b_labels.shape[0] == 2
         assert b_labels.shape[1] == token_lengths[i]
+
+def test_train_as_batches_no_shuffle():
+    dataset = TrainingDataset(tokens, strict_match_labels, 0)
+
+    token_lengths = [10, 13, 26, 19]
+    for i, batch in enumerate(dataset.as_batches(batch_size=2, shuffle=False)):
+        b_tokens, b_labels = batch
+
+        assert b_tokens.shape[0] == 2
+        assert b_tokens.shape[1] == token_lengths[i]
+
+        assert b_labels.shape[0] == 2
+
+def test_train_as_batches_shuffle_sample():
+    dataset = TrainingDataset(tokens, strict_match_labels, 0)
+
+    token_lengths = [19, 19]
+    for i, batch in enumerate(dataset.as_batches(batch_size=2, sample=4)):
+        b_tokens, b_labels = batch
+
+        assert b_tokens.shape[0] == 2
+        assert b_tokens.shape[1] == token_lengths[i]
+
+        assert b_labels.shape[0] == 2

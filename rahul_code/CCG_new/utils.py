@@ -2,6 +2,7 @@ import re
 import string
 from CCG_new import constants
 from CCG_new import util_classes
+import pdb
 
 def _find_quoted_phrases(explanation):
     """
@@ -110,10 +111,11 @@ def clean_explanation(explanation):
     """
     segments = segment_explanation(explanation)
     for i, segment in enumerate(segments):
-        if segment[0] != "*":
-            segments[i] = clean_text(segment)
-        else:
-            segments[i] = "\"" + segment[2:len(segment)-1].lower() + "\""
+        if len(segment):
+            if segment[0] != "*":
+                segments[i] = clean_text(segment)
+            else:
+                segments[i] = "\"" + segment[2:len(segment)-1].lower() + "\""
     
     cleaned_explanation = " ".join(segments).strip()
 
@@ -240,8 +242,9 @@ def add_rules_to_grammar(tokens, grammar_string):
     """
     grammar = grammar_string
     for token in tokens:
+        raw_token = token[1:len(token)-1]
         token = prepare_token_for_rule_addition(token)
-        if token.isdigit():
+        if raw_token.isdigit():
             grammar = grammar + "\t" + token + " => NP/NP {\\x.'@Num'(" + token + ",x)}" + "\n\t" + token + " => N/N {\\x.'@Num'(" + token + ",x)}"+"\n"
             grammar = grammar + "\t" + token + " => NP {" + token + "}" + "\n\t\t" + token + " => N {" + token + "}"+"\n"
             grammar = grammar + "\t" + token + " => PP/PP/NP/NP {\\x y F.'@WordCount'('@Num'(" + token + ",x),y,F)}" + "\n\t" + token + " => PP/PP/N/N {\\x y F.'@WordCount'('@Num'(" + token + ",x),y,F)}"+"\n"
@@ -260,47 +263,50 @@ def generate_phrase(sentence, nlp):
         Returns
             Phrase : useful wrapper object
     """
-    if "SUBJ" in sentence and "OBJ" in sentence:
-        subj_type = re.search(r"SUBJ-[A-Z_'s,]+ ", sentence).group(0).strip()
-        subj_type = subj_type.replace("'s", "")
-        subj_type = subj_type.replace(",", "")
-        obj_type = re.search(r"OBJ-[A-Z_'s,]+ ", sentence).group(0).strip()
-        obj_type = obj_type.replace("'s", "")
-        obj_type = obj_type.replace(",", "")
-        sentence = re.sub(r"SUBJ-[A-Z_]+ ", "SUBJ ", sentence)
-        sentence = re.sub(r"SUBJ-[A-Z_'s]+ ", "SUBJ's ", sentence)
-        sentence = re.sub(r"SUBJ-[A-Z_]+,", "SUBJ,", sentence)
-        sentence = re.sub(r"OBJ-[A-Z_]+ ", "OBJ ", sentence)
-        sentence = re.sub(r"OBJ-[A-Z_'s]+ ", "OBJ's ", sentence)
-        sentence = re.sub(r"OBJ-[A-Z_]+,", "OBJ,", sentence)
+    try:
+        if "SUBJ" in sentence and "OBJ" in sentence:
+            subj_type = re.search(r"SUBJ-[A-Z_'s,]+", sentence).group(0).split("-")[1].strip()
+            subj_type = subj_type.replace("'s", "")
+            subj_type = subj_type.replace(",", "")
+            obj_type = re.search(r"OBJ-[A-Z_'s,]+", sentence).group(0).split("-")[1].strip()
+            obj_type = obj_type.replace("'s", "")
+            obj_type = obj_type.replace(",", "")
+            sentence = re.sub(r"SUBJ-[A-Z_]+", "SUBJ", sentence)
+            sentence = re.sub(r"SUBJ-[A-Z_'s]+", "SUBJ's", sentence)
+            sentence = re.sub(r"SUBJ-[A-Z_]+,", "SUBJ,", sentence)
+            sentence = re.sub(r"OBJ-[A-Z_]+", "OBJ", sentence)
+            sentence = re.sub(r"OBJ-[A-Z_'s]+", "OBJ's ", sentence)
+            sentence = re.sub(r"OBJ-[A-Z_]+,", "OBJ,", sentence)
 
-    doc = nlp(sentence)
-    ners = [token.ent_type_ if token.text not in ["SUBJ", "OBJ"] else "" for token in doc]
-    tokens = [token.text for token in doc]
-    subj_posi = None
-    obj_posi = None
-    indices_to_pop = []
-    for i, token in enumerate(tokens):
-        if token == "SUBJ":
-            if subj_posi:
-                indices_to_pop.append(i)
-            else:
-                subj_posi = i
-                tokens[i] = subj_type
-        elif token == "OBJ":
-            if obj_posi:
-                indices_to_pop.append(i)
-            else:
-                obj_posi = i
-                tokens[i] = obj_type
+        doc = nlp(sentence)
+        ners = [token.ent_type_ if token.text not in ["SUBJ", "OBJ"] else "" for token in doc]
+        tokens = [token.text for token in doc]
+        subj_posi = None
+        obj_posi = None
+        indices_to_pop = []
+        for i, token in enumerate(tokens):
+            if token == "SUBJ":
+                if subj_posi:
+                    indices_to_pop.append(i)
+                else:
+                    subj_posi = i
+                    ners[i] = subj_type
+            elif token == "OBJ":
+                if obj_posi:
+                    indices_to_pop.append(i)
+                else:
+                    obj_posi = i
+                    ners[i] = obj_type
 
-    if len(indices_to_pop):
-        indices_to_pop.reverse()
-        for index in indices_to_pop:
-            ners.pop(index)
-            tokens.pop(index)
-    
-    return util_classes.Phrase(tokens, ners, subj_posi, obj_posi)
+        if len(indices_to_pop):
+            indices_to_pop.reverse()
+            for index in indices_to_pop:
+                ners.pop(index)
+                tokens.pop(index)
+        
+        return util_classes.Phrase(tokens, ners, subj_posi, obj_posi)
+    except:
+        pdb.set_trace()
 
 def create_semantic_repr(parse_tree):
     """
@@ -396,7 +402,7 @@ def create_labeling_function(semantic_repr, level=0):
     # print("level {}".format(level))
         if isinstance(semantic_repr, tuple):
             # print("function name {}".format(semantic_repr[0]))
-            op = constants.OPS[semantic_repr[0]]
+            op = constants.STRICT_MATCHING_OPS[semantic_repr[0]]
             # print("function {}".format(op))
             args = [create_labeling_function(arg, level=level+1) for arg in semantic_repr[1:]]
             # print("level {}".format(level))
@@ -413,60 +419,29 @@ def create_labeling_function(semantic_repr, level=0):
     except:
         return False
 
+def create_soft_labeling_function(semantic_repr, level=0):
+    """
+        Creates a labeling function (lambda function) from a hierarchical tuple representation
+        of the semantics of a parse tree. The labeling function takes in a Phrase object and then
+        evaluates whether the labeling function applies to this Phrase object.
 
-
-# def collect_features(semantic_repr, tree_operation_pairs):
-#     """
-#         Inspiration:
-#         https://nbviewer.jupyter.org/github/wcmac/sippycup/blob/master/sippycup-unit-1.ipynb#Scoring-candidate-parses
-
-#         Creates the needed pairs of operations to then construct a feature representation
-#         of the semantics of a parse. Pairs of operations describe the hierarchical order of operations
-#         being applied to an input.
+        Arguments:
+            semantic_repr (tuple) : hierarchical tuple representation
         
-#         Ex: ('.root', ('@Is', ('@Word', "'s grandmother"), ('@between', ('@And', 'ArgY', 'ArgX')))
-#         Results: ('.root', '@Is'), ('@Is', '@Word'), ('@Is', '@between'), ('@between', '@And')
-        
-#         tree_operation_pairs is an empty list that holds the result of this recursive function
-        
-#         Arguments:
-#             semantic_repr      (tuple) : hierarchical tuple representation,
-#             tree_operation_pairs (arr) : empty list to hold pairs extracted from semantic_repr
-#     """
-#     if isinstance(semantic_repr, tuple):
-#         for child in semantic_repr[1:]:
-#             if isinstance(child, tuple) and child[0] != semantic_repr[0]:
-#                 tree_operation_pairs.append((semantic_repr[0], child[0]))
-#             collect_features(child, tree_operations_pairs)
-
-# def get_feature(semantic_repr):
-#     """
-#         Feature function that operates on semantic representation of parse, instead of the parse itself.
-
-#         Based on a hierarchical represation of the semantics of a parse, the function creates a feature vector
-#         counting the number of occurrences of certain operation pairs.
-
-#         Arguments:
-#             semantic_repr (tuple) : hierarchical tuple representation
-        
-#         Returns:
-#             numpy array : feature vector for semantic representation
-
-#     """
-#     feature_vector = np.zeros([len(constants.OPERATION_FEATURES)], np.float32)
-
-#     tree_operation_pairs = []
-#     collect_features(semantic_repr, tree_operations_pairs)
-
-#     for operation_pair in tree_operation_pairs:
-#         if operation_pair[0]!=None and operation_pair[1]!=None:
-#             opf = ''.join(list(operation_pair))
-#             if opf in constants.OPERATION_FEATURES:
-#                 feature_vector[constants.OPERATION_FEATURES[opf]], 0] += 1.0
-    
-#     return feature_vector
-
-
-
-
-
+        Returns:
+            function | false : if a function is creatable via the tuple, it is created, else false
+    """
+    try:
+        if isinstance(semantic_repr, tuple):
+            op = constants.SOFT_MATCHING_OPS[semantic_repr[0]]
+            args = [create_soft_labeling_function(arg) for arg in semantic_repr[1:]]
+            if False in args:
+                return False
+            return op(*args) if args else op
+        else:
+            if semantic_repr in constants.NER_TERMINAL_TO_EXECUTION_TUPLE:
+                return constants.NER_TERMINAL_TO_EXECUTION_TUPLE[semantic_repr]
+            else:
+                return semantic_repr
+    except:
+        return False

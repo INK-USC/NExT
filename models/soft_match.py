@@ -154,6 +154,8 @@ class Soft_Match(object):
 
         for i, soft_labeling_function in enumerate(self.labeling_functions_soft):
             try:
+                # soft_labeling_function(label_mat, self.raw_keyword_dict, self.mask_mat)(
+                   # self.phrases_input) -> (B x 1)
                 sim_raw.append(soft_labeling_function(label_mat, self.raw_keyword_dict, self.mask_mat)(
                     self.phrases_input) * self.type_restrict(i))
             except:
@@ -181,11 +183,11 @@ class Soft_Match(object):
                     self.hard_train_loss = sent_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(
                         logits=logit[:config.batch_size], labels=self.rel[:config.batch_size]), axis=0)
 
-                    lsim = sim[:config.batch_size]
-                    index_tensor = tf.reshape(tf.constant(np.arange(config.batch_size),tf.int32),[config.batch_size,1])
-                    select_tensor = tf.reshape(self.hard_match_func_idx,[config.batch_size,1])
-                    probs = tf.reshape(tf.gather_nd(lsim,tf.concat([index_tensor,select_tensor],axis=1)),[config.batch_size,1])
-                    self.labeled_loss = labeled_loss = tf.reduce_mean(tf.square((1-probs)))
+                    # lsim = sim[:config.batch_size]
+                    # index_tensor = tf.reshape(tf.constant(np.arange(config.batch_size),tf.int32),[config.batch_size,1])
+                    # select_tensor = tf.reshape(self.hard_match_func_idx,[config.batch_size,1])
+                    # probs = tf.reshape(tf.gather_nd(lsim,tf.concat([index_tensor,select_tensor],axis=1)),[config.batch_size,1])
+                    # self.labeled_loss = labeled_loss = tf.reduce_mean(tf.square((1-probs)))
 
                     xsim = tf.stop_gradient(sim[config.batch_size:])
 
@@ -204,8 +206,8 @@ class Soft_Match(object):
         self.pred = tf.argmax(pred, axis=1)
         self.loss = sent_loss + self.beta * sim_loss
         #similarity model预测出来的结果
-        self.sim_pred = tf.argmax(tf.gather(self.rels, tf.argmax(self.sim, axis=1)), axis=1)
-        self.sim_max_val = tf.reduce_max(self.sim, axis=1)
+        # self.sim_pred = tf.argmax(tf.gather(self.rels, tf.argmax(self.sim, axis=1)), axis=1)
+        # self.sim_max_val = tf.reduce_max(self.sim, axis=1)
         #true label
         self.gold = tf.argmax(self.rel, axis=1)
         self.entropy = tf.reduce_mean(entropy, axis=0)
