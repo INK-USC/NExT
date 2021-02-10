@@ -4,7 +4,7 @@ import torch.nn.functional as f
 
 class BiLSTM_Att_Clf(nn.Module):
     def __init__(self, emb_weight, padding_idx, emb_dim, hidden_dim, cuda, number_of_classes,
-                 n_layers=2, encoding_dropout=0.5, padding_score=-1e30, add_subj_obj=True):
+                 n_layers=2, encoding_dropout=0.2, padding_score=-1e30, add_subj_obj=True):
         """
             Arguments:
                 emb_weight (torch.tensor) : created vocabulary's vector representation for each token, where

@@ -297,14 +297,14 @@ def main():
                 unlabeled_label_index = torch.argmax(function_batch_scores_tensor, dim=1) # B
 
                 unlabeled_labels = torch.tensor([soft_labeling_function_labels[index] for index in unlabeled_label_index]).to(device).detach() # B
-                unlabeled_label_weights = nn.functional.softmax(torch.amax(function_batch_scores_tensor, dim=1), dim=0) # B
+                unlabeled_label_weights = nn.functional.softmax(torch.amax(function_batch_scores_tensor, dim=1), dim=0) * 10 # B
             
             strict_match_predictions = clf.forward(strict_match_tokens)
             soft_match_predictions = clf.forward(unlabeled_tokens)
             # lsim_pos_scores, lsim_neg_scores = model.sim_forward(lsim_query_tokens, query_index_matrix, neg_query_index_matrix)
 
             strict_match_loss = strict_match_loss_function(strict_match_predictions, strict_match_labels)
-            soft_match_loss = torch.mean(soft_match_loss_function(soft_match_predictions, unlabeled_labels) * unlabeled_label_weights)
+            soft_match_loss = torch.mean(soft_match_loss_function(soft_match_predictions, unlabeled_labels) * unlabeled_label_weights) * 10
             # sim_loss = sim_loss_function(lsim_pos_scores, lsim_neg_scores)
             # combined_loss = strict_match_loss + args.gamma * soft_match_loss + args.beta * sim_loss
             combined_loss = strict_match_loss + args.gamma * soft_match_loss

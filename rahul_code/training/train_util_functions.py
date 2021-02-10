@@ -205,30 +205,30 @@ def build_datasets_from_splits(train_path, dev_path, test_path, vocab_path, expl
         obj_idx = subj_idx + 1
         special_words = {"subj" : subj_idx, "obj" : obj_idx}
 
-    # parser_training_data = random.sample(train, min(PARSER_TRAIN_SAMPLE, len(train)))
+    parser_training_data = random.sample(train, min(PARSER_TRAIN_SAMPLE, len(train)))
     
-    # parser = create_parser(parser_training_data, explanation_path, dataset)
+    parser = create_parser(parser_training_data, explanation_path, dataset)
 
-    with open("parser.p", "rb") as f:
-        parser = dill.load(f)
+    # with open("parser.p", "rb") as f:
+    #     parser = dill.load(f)
     
     strict_labeling_functions = parser.labeling_functions
     
     train_sample = None
-    # if sample_rate > 0:
-    #     sample_number = int(len(train) * sample_rate)
-    #     train_sample = random.sample(train, sample_number)
+    if sample_rate > 0:
+        sample_number = int(len(train) * sample_rate)
+        train_sample = random.sample(train, sample_number)
 
-    # if train_sample:
-    #     matched_data_tuples, unlabeled_data_phrases = match_training_data(strict_labeling_functions, train_sample)
-    # else:
-    #     matched_data_tuples, unlabeled_data_phrases = match_training_data(strict_labeling_functions, train)
+    if train_sample:
+        matched_data_tuples, unlabeled_data_phrases = match_training_data(strict_labeling_functions, train_sample)
+    else:
+        matched_data_tuples, unlabeled_data_phrases = match_training_data(strict_labeling_functions, train)
 
-    with open("matched_data_tuples.p", "rb") as f:
-        matched_data_tuples = pickle.load(f)
+    # with open("matched_data_tuples.p", "rb") as f:
+    #     matched_data_tuples = pickle.load(f)
     
-    with open("unlabeled_data.p", "rb") as f:
-        unlabeled_data_phrases = pickle.load(f)
+    # with open("unlabeled_data.p", "rb") as f:
+    #     unlabeled_data_phrases = pickle.load(f)
     
     build_unlabeled_dataset(unlabeled_data_phrases, vocab, save_string, special_words)
 
