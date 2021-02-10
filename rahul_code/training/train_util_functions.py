@@ -269,8 +269,7 @@ def _apply_no_relation_label(entropy, preds, label_map, no_relation_key, thresho
 
     return final_preds
 
-def evaluate_next_clf(data_path, queries, query_index_matrix, neg_query_index_matrix,
-                      model, strict_loss_fn, sim_loss_fn, label_map, no_relation_threshold=None,
+def evaluate_next_clf(data_path, model, strict_loss_fn, label_map, no_relation_threshold=None,
                       batch_size=128, gamma=0.7, beta=0.5, no_relation_key="no_relation"):
 
     with open(data_path, "rb") as f:

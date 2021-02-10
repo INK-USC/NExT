@@ -54,11 +54,11 @@ def main():
                         default="../data/pre_train_data/vocab_glove.840B.300d_-1_0.6.p",
                         help="Path to vocab created in Pre-training")
     parser.add_argument("--match_batch_size",
-                        default=32,
+                        default=64,
                         type=int,
                         help="Match batch size for train.")
     parser.add_argument("--unlabeled_batch_size",
-                        default=64,
+                        default=128,
                         type=int,
                         help="Unlabeled batch size for train.")
     parser.add_argument("--eval_batch_size",
@@ -333,8 +333,7 @@ def main():
         loss_tuples = ("%.5f" % train_avg_loss, "%.5f" % train_avg_strict_loss, "%.5f" % train_avg_soft_loss, "%.5f" % train_avg_sim_loss)
         print("Avg Train Total Loss: {}, Avg Train Strict Loss: {}, Avg Train Soft Loss: {}, Avg Train Sim Loss: {}".format(*loss_tuples))
 
-        dev_results = evaluate_next_clf(dev_path, lsim_query_tokens, query_index_matrix, neg_query_index_matrix,\
-                                        clf, strict_match_loss_function, sim_loss_function,\
+        dev_results = evaluate_next_clf(dev_path, clf, strict_match_loss_function,\
                                         TACRED_LABEL_MAP, batch_size=args.eval_batch_size)
         
         avg_dev_strict_loss, avg_dev_sim_loss, avg_dev_f1_score, total_dev_class_probs, no_relation_threshold = dev_results
@@ -349,8 +348,7 @@ def main():
             best_dev_f1_score = avg_dev_f1_score
             print("Updated Dev F1 Score")
         
-        test_results = evaluate_next_clf(test_path, lsim_query_tokens, query_index_matrix, neg_query_index_matrix,\
-                                         clf, strict_match_loss_function, sim_loss_function,\
+        test_results = evaluate_next_clf(test_path, clf, strict_match_loss_function,\
                                          TACRED_LABEL_MAP, no_relation_threshold=no_relation_threshold,\
                                          batch_size=args.eval_batch_size)
         
