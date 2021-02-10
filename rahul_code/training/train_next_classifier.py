@@ -9,7 +9,7 @@ from training.train_util_functions import batch_type_restrict, build_phrase_inpu
 from training.util_functions import similarity_loss_function, generate_save_string
 from training.util_classes import BaseVariableLengthDataset
 from training.constants import TACRED_LABEL_MAP
-from models import NExT_Classifier
+from models import BiLSTM_Att_Clf, Find_Module
 import pickle
 from tqdm import tqdm
 import torch.nn as nn
@@ -142,8 +142,8 @@ def main():
     with open(args.vocab_path, "rb") as f:
         vocab = pickle.load(f)
     
-    with open(args.l_sim_data_path, "rb") as f:
-        sim_data = pickle.load(f)
+    # with open(args.l_sim_data_path, "rb") as f:
+    #     sim_data = pickle.load(f)
     
     with open("../data/training_data/labeling_functions_{}.p".format(save_string), "rb") as f:
         soft_labeling_functions_dict = dill.load(f)
@@ -163,10 +163,14 @@ def main():
         device = torch.device("cuda")
     else:
         device = torch.device("cpu")
+    
+    find_module = Find_Module.Find_Module(vocab.vectors, pad_idx, args.emb_dim, args.hidden_dim,
+                                          torch.cuda.is_available())
+        
+    find_module.load_state_dict(torch.load(args.find_module_path))
 
-    model = NExT_Classifier.NExT_Classifier(emb_weight=vocab.vectors, padding_idx=pad_idx, emb_dim=args.emb_dim,
-                                            hidden_dim=args.hidden_dim, cuda=torch.cuda.is_available(),
-                                            number_of_classes=number_of_classes, find_module_path=args.find_module_path)
+    clf = BiLSTM_Att_Clf.BiLSTM_Att_Clf(vocab.vectors, pad_idx, args.emb_dim, args.hidden_dim,
+                                        torch.cuda.is_available(), number_of_classes)
     
     del vocab
 
@@ -179,10 +183,10 @@ def main():
     best_test_strict_loss = float('inf')
 
     if args.load_clf_model:
-        model.load_state_dict(torch.load("../data/saved_models/Next-Clf_{}.p".format(args.experiment_name)))
+        clf.load_state_dict(torch.load("../data/saved_models/Clf_{}.p".format(args.experiment_name)))
         print("loaded model")
 
-        with open("../data/result_data/test_loss_per_epoch_Next-Clf_{}.csv".format(args.experiment_name)) as f:
+        with open("../data/result_data/test_loss_per_epoch_Clf_{}.csv".format(args.experiment_name)) as f:
             reader=csv.reader(f)
             next(reader)
             for row in reader:
@@ -192,7 +196,7 @@ def main():
                 if float(row[0]) < best_test_strict_loss:
                     best_test_strict_loss = float(row[0])
         
-        with open("../data/result_data/dev_loss_per_epoch_Next-Clf_{}.csv".format(args.experiment_name)) as f:
+        with open("../data/result_data/dev_loss_per_epoch_Clf_{}.csv".format(args.experiment_name)) as f:
             reader=csv.reader(f)
             next(reader)
             for row in reader:
@@ -202,45 +206,46 @@ def main():
         
         print("loaded past results")
     
-    model = model.to(device)
+    clf = clf.to(device)
+    find_module = find_module.to(device)
 
     # Get queries ready for Find Module
     lfind_query_tokens = BaseVariableLengthDataset.variable_length_batch_as_tensors(tokenized_queries, pad_idx)
     lfind_query_tokens = lfind_query_tokens.to(device).detach()
 
     # Get L_sim Data ready
-    lsim_query_tokens = BaseVariableLengthDataset.variable_length_batch_as_tensors(sim_data["queries"], pad_idx)
-    lsim_query_tokens = lsim_query_tokens.to(device)
-    query_labels = sim_data["labels"]
+    # lsim_query_tokens = BaseVariableLengthDataset.variable_length_batch_as_tensors(sim_data["queries"], pad_idx)
+    # lsim_query_tokens = lsim_query_tokens.to(device)
+    # query_labels = sim_data["labels"]
     
-    queries_by_label = {}
-    for i, label in enumerate(query_labels):
-        if label in queries_by_label:
-            queries_by_label[label][i] = 1
-        else:
-            queries_by_label[label] = [0] * len(query_labels)
-            queries_by_label[label][i] = 1
+    # queries_by_label = {}
+    # for i, label in enumerate(query_labels):
+    #     if label in queries_by_label:
+    #         queries_by_label[label][i] = 1
+    #     else:
+    #         queries_by_label[label] = [0] * len(query_labels)
+    #         queries_by_label[label][i] = 1
     
-    query_index_matrix = []
-    for i, label in enumerate(query_labels):
-        query_index_matrix.append(queries_by_label[label][:])
+    # query_index_matrix = []
+    # for i, label in enumerate(query_labels):
+    #     query_index_matrix.append(queries_by_label[label][:])
     
-    query_index_matrix = torch.tensor(query_index_matrix)
-    neg_query_index_matrix = 1 - query_index_matrix
-    for i, row in enumerate(neg_query_index_matrix):
-        neg_query_index_matrix[i][i] = 1
+    # query_index_matrix = torch.tensor(query_index_matrix)
+    # neg_query_index_matrix = 1 - query_index_matrix
+    # for i, row in enumerate(neg_query_index_matrix):
+    #     neg_query_index_matrix[i][i] = 1
 
-    query_index_matrix = query_index_matrix.to(device)
-    neg_query_index_matrix = neg_query_index_matrix.to(device)
+    # query_index_matrix = query_index_matrix.to(device)
+    # neg_query_index_matrix = neg_query_index_matrix.to(device)
 
     # Preping Soft Labeling Function Data
     soft_labeling_functions = soft_labeling_functions_dict["function_pairs"]
     soft_labeling_function_labels = soft_labeling_functions_dict["labels"]
 
     if args.use_adagrad:
-        optimizer = Adagrad(model.parameters(), lr=args.learning_rate)
+        optimizer = Adagrad(clf.parameters(), lr=args.learning_rate)
     else:
-        optimizer = AdamW(model.parameters(), lr=args.learning_rate)
+        optimizer = AdamW(clf.parameters(), lr=args.learning_rate)
     
     # define loss functions
     strict_match_loss_function  = nn.CrossEntropyLoss()
@@ -252,7 +257,8 @@ def main():
 
         total_loss, strict_total_loss, soft_total_loss, sim_total_loss = 0, 0, 0, 0
         batch_count = 0
-        model.train()
+        clf.train()
+        find_module.eval()
 
         for step, batch_pair in enumerate(tqdm(zip(strict_match_data.as_batches(batch_size=args.match_batch_size, seed=epoch),\
                                                    unlabeled_data.as_batches(batch_size=args.unlabeled_batch_size, seed=epoch)))):
@@ -271,39 +277,41 @@ def main():
             mask_mat = build_mask_mat_for_batch(seq_length).to(device).detach()
 
             # clear previously calculated gradients 
-            model.zero_grad()  
+            clf.zero_grad()  
             
-            lfind_output = model.build_query_score_matrix(unlabeled_tokens.detach(), lfind_query_tokens, lower_bound).detach() # B x seq_len x Q
+            with torch.no_grad():
+                lfind_output = find_module.soft_matching_forward(unlabeled_tokens.detach(), lfind_query_tokens, lower_bound).detach() # B x seq_len x Q
             
-            function_batch_scores = []
-            for pair in soft_labeling_functions:
-                func, rel = pair
-                try:
-                    batch_scores = func(lfind_output, quoted_words_to_index, mask_mat)(phrase_input).detach() # 1 x B
-                except:
-                    batch_scores = torch.zeros((1, args.unlabeled_batch_size)).to(device).detach()
-                type_restrict_multiplier = batch_type_restrict(rel, phrase_input).detach() # 1 x B
-                final_scores = batch_scores * type_restrict_multiplier # 1 x B
-                function_batch_scores.append(final_scores)
+                function_batch_scores = []
+                for pair in soft_labeling_functions:
+                    func, rel = pair
+                    try:
+                        batch_scores = func(lfind_output, quoted_words_to_index, mask_mat)(phrase_input).detach() # 1 x B
+                    except:
+                        batch_scores = torch.zeros((1, args.unlabeled_batch_size)).to(device).detach()
+                    type_restrict_multiplier = batch_type_restrict(rel, phrase_input).detach() # 1 x B
+                    final_scores = batch_scores * type_restrict_multiplier # 1 x B
+                    function_batch_scores.append(final_scores)
             
-            function_batch_scores_tensor = torch.cat(function_batch_scores, dim=0).detach().permute(1,0) # B x Q
-            unlabeled_label_index = torch.argmax(function_batch_scores_tensor, dim=1) # B
+                function_batch_scores_tensor = torch.cat(function_batch_scores, dim=0).detach().permute(1,0) # B x Q
+                unlabeled_label_index = torch.argmax(function_batch_scores_tensor, dim=1) # B
 
-            unlabeled_labels = torch.tensor([soft_labeling_function_labels[index] for index in unlabeled_label_index]).to(device).detach() # B
-            unlabeled_label_weights = nn.functional.softmax(torch.amax(function_batch_scores_tensor, dim=1) * 10, dim=0) # B
+                unlabeled_labels = torch.tensor([soft_labeling_function_labels[index] for index in unlabeled_label_index]).to(device).detach() # B
+                unlabeled_label_weights = nn.functional.softmax(torch.amax(function_batch_scores_tensor, dim=1), dim=0) # B
             
-            strict_match_predictions = model.predictions(strict_match_tokens)
-            soft_match_predictions = model.predictions(unlabeled_tokens)
-            lsim_pos_scores, lsim_neg_scores = model.sim_forward(lsim_query_tokens, query_index_matrix, neg_query_index_matrix)
+            strict_match_predictions = clf.forward(strict_match_tokens)
+            soft_match_predictions = clf.forward(unlabeled_tokens)
+            # lsim_pos_scores, lsim_neg_scores = model.sim_forward(lsim_query_tokens, query_index_matrix, neg_query_index_matrix)
 
             strict_match_loss = strict_match_loss_function(strict_match_predictions, strict_match_labels)
             soft_match_loss = torch.mean(soft_match_loss_function(soft_match_predictions, unlabeled_labels) * unlabeled_label_weights)
-            sim_loss = sim_loss_function(lsim_pos_scores, lsim_neg_scores)
-            combined_loss = strict_match_loss + args.gamma * soft_match_loss + args.beta * sim_loss
+            # sim_loss = sim_loss_function(lsim_pos_scores, lsim_neg_scores)
+            # combined_loss = strict_match_loss + args.gamma * soft_match_loss + args.beta * sim_loss
+            combined_loss = strict_match_loss + args.gamma * soft_match_loss
 
             strict_total_loss = strict_total_loss + strict_match_loss.item()
             soft_total_loss = soft_total_loss + soft_match_loss.item()
-            sim_total_loss = sim_total_loss + sim_loss.item()
+            # sim_total_loss = sim_total_loss + sim_loss.item()
             total_loss = total_loss + combined_loss.item()
             batch_count += 1
 
@@ -311,7 +319,7 @@ def main():
                 print((total_loss, strict_total_loss, soft_total_loss, sim_total_loss,  batch_count))
             
             combined_loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            torch.nn.utils.clip_grad_norm_(clf.parameters(), 1.0)
 
             optimizer.step()
 
@@ -326,7 +334,7 @@ def main():
         print("Avg Train Total Loss: {}, Avg Train Strict Loss: {}, Avg Train Soft Loss: {}, Avg Train Sim Loss: {}".format(*loss_tuples))
 
         dev_results = evaluate_next_clf(dev_path, lsim_query_tokens, query_index_matrix, neg_query_index_matrix,\
-                                        model, strict_match_loss_function, sim_loss_function,\
+                                        clf, strict_match_loss_function, sim_loss_function,\
                                         TACRED_LABEL_MAP, batch_size=args.eval_batch_size)
         
         avg_dev_strict_loss, avg_dev_sim_loss, avg_dev_f1_score, total_dev_class_probs, no_relation_threshold = dev_results
@@ -342,7 +350,7 @@ def main():
             print("Updated Dev F1 Score")
         
         test_results = evaluate_next_clf(test_path, lsim_query_tokens, query_index_matrix, neg_query_index_matrix,\
-                                         model, strict_match_loss_function, sim_loss_function,\
+                                         clf, strict_match_loss_function, sim_loss_function,\
                                          TACRED_LABEL_MAP, no_relation_threshold=no_relation_threshold,\
                                          batch_size=args.eval_batch_size)
         
@@ -360,10 +368,10 @@ def main():
                 dir_name = args.model_save_dir
             else:
                 dir_name = "../data/saved_models/"
-            torch.save(model.state_dict(), "{}Next-Clf_{}.p".format(dir_name, args.experiment_name))
-            with open("../data/result_data/test_loss_per_epoch_Next-Clf_{}.csv".format(args.experiment_name), "wb") as f:
+            torch.save(clf.state_dict(), "{}Clf_{}.p".format(dir_name, args.experiment_name))
+            with open("../data/result_data/test_loss_per_epoch_Clf_{}.csv".format(args.experiment_name), "wb") as f:
                 pickle.dump(total_test_class_probs, f)
-            with open("../data/result_data/dev_loss_per_epoch_Next-Clf_{}.csv".format(args.experiment_name), "wb") as f:
+            with open("../data/result_data/dev_loss_per_epoch_Clf_{}.csv".format(args.experiment_name), "wb") as f:
                 pickle.dump(total_dev_class_probs, f)
             with open("../data/result_data/threshold.p", "wb") as f:
                 pickle.dump({"threshold" : no_relation_threshold}, f)

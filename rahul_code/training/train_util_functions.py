@@ -294,11 +294,11 @@ def evaluate_next_clf(data_path, queries, query_index_matrix, neg_query_index_ma
         batch = [r.to(device) for r in batch]
         tokens, batch_labels = batch
         with torch.no_grad():
-            preds = model.predictions(tokens)
-            lsim_pos_scores, lsim_neg_scores = model.sim_forward(queries, query_index_matrix, neg_query_index_matrix)
+            preds = model.forward(tokens)
+            # lsim_pos_scores, lsim_neg_scores = model.sim_forward(queries, query_index_matrix, neg_query_index_matrix)
 
             # strict_loss = strict_loss_fn(preds, batch_labels)
-            sim_loss = sim_loss_fn(lsim_pos_scores, lsim_neg_scores)
+            # sim_loss = sim_loss_fn(lsim_pos_scores, lsim_neg_scores)
 
             class_probs = nn.functional.softmax(preds, dim=1)
             entropy = torch.sum(class_probs * -1.0 * torch.log(class_probs), axis=1).cpu().numpy()
@@ -310,17 +310,17 @@ def evaluate_next_clf(data_path, queries, query_index_matrix, neg_query_index_ma
             f1_score = metrics.f1_score(f1_labels, final_class_preds, average='macro')
 
             # strict_total_loss += strict_loss.item()
-            sim_total_loss += sim_loss.item()
+            # sim_total_loss += sim_loss.item()
             total_f1_score += f1_score
             batch_count += 1
             total_class_probs.append(class_probs.cpu().numpy())
     
     # avg_strict_loss = strict_total_loss / batch_count
-    avg_sim_loss = sim_total_loss / batch_count
+    # avg_sim_loss = sim_total_loss / batch_count
     avg_f1_score = total_f1_score / batch_count
     total_class_probs = np.concatenate(total_class_probs, axis=0)
 
-    return 0.0, avg_sim_loss, avg_f1_score, total_class_probs, no_relation_threshold
+    return 0.0, 0.0, avg_f1_score, total_class_probs, no_relation_threshold
 
 def prep_and_tune_no_relation_threshold(model, eval_dataset, device, batch_size, label_map, no_relation_key):
     entropy_values = []
@@ -336,7 +336,7 @@ def prep_and_tune_no_relation_threshold(model, eval_dataset, device, batch_size,
         tokens = tokens.to(device)
 
         with torch.no_grad():
-            preds = model.predictions(tokens) # b x c
+            preds = model.forward(tokens) # b x c
             class_probs = nn.functional.softmax(preds, dim=1)
             entropy = torch.sum(class_probs * -1.0 * torch.log(class_probs), axis=1)
             class_preds = torch.argmax(class_probs, dim=1)

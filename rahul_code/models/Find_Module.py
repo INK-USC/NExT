@@ -598,4 +598,8 @@ class Find_Module(nn.Module):
 
         seq_similarities = torch.clamp(seq_similarities, min=lower_bound)
 
-        return seq_similarities, seq_padding_indexes
+        seq_padding_indexes = 1.0 - seq_padding_indexes
+        seq_similarities = torch.sigmoid(seq_similarities) * seq_padding_indexes
+        seq_similarities = seq_similarities.permute(1, 2, 0)
+
+        return seq_similarities
