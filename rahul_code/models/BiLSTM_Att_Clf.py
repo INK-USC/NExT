@@ -4,7 +4,7 @@ import torch.nn.functional as f
 
 class BiLSTM_Att_Clf(nn.Module):
     def __init__(self, emb_weight, padding_idx, emb_dim, hidden_dim, cuda, number_of_classes,
-                 n_layers=2, encoding_dropout=0.2, padding_score=-1e30, add_subj_obj=True):
+                 n_layers=2, encoding_dropout=0.2, padding_score=-1e30, add_subj_obj=True, mlp_layer=3):
         """
             Arguments:
                 emb_weight (torch.tensor) : created vocabulary's vector representation for each token, where
@@ -30,6 +30,7 @@ class BiLSTM_Att_Clf(nn.Module):
         self.hidden_dim = hidden_dim
         self.encoding_dim = 2*hidden_dim
         self.number_of_classes = number_of_classes
+        self.mlp_layer = mlp_layer
 
         if add_subj_obj:
             subj_vector = torch.randn(1, emb_dim)
@@ -48,10 +49,15 @@ class BiLSTM_Att_Clf(nn.Module):
         nn.init.kaiming_uniform_(self.attention_vector.weight, mode='fan_in')
         self.attn_softmax = nn.Softmax(dim=2)
 
-        self.weight_linear_layer_1 = nn.Linear(self.encoding_dim, 256)
-        nn.init.kaiming_uniform_(self.weight_linear_layer_1.weight, a=0.01, mode='fan_in')
-        self.weight_linear_layer_2 = nn.Linear(256, 128)
-        nn.init.kaiming_uniform_(self.weight_linear_layer_2.weight, a=0.01, mode='fan_in')
+        if self.mlp_layer == 3:
+            self.weight_linear_layer_1 = nn.Linear(self.encoding_dim, 256)
+            nn.init.kaiming_uniform_(self.weight_linear_layer_1.weight, a=0.01, mode='fan_in')
+            self.weight_linear_layer_2 = nn.Linear(256, 128)
+            nn.init.kaiming_uniform_(self.weight_linear_layer_2.weight, a=0.01, mode='fan_in')
+        else:
+            self.weight_linear_layer_2 = nn.Linear(self.encoding_dim, 128)
+            nn.init.kaiming_uniform_(self.weight_linear_layer_2.weight, a=0.01, mode='fan_in')
+        
         self.weight_linear_layer_3 = nn.Linear(128, 64)
         nn.init.kaiming_uniform_(self.weight_linear_layer_3.weight, a=0.01, mode='fan_in')
         
@@ -141,16 +147,21 @@ class BiLSTM_Att_Clf(nn.Module):
             
             Returns:
                 (torch.tensor) : N x number_of_classes
-        """        
-        compressed_vector = self.weight_linear_layer_1(pooled_vectors) # N x 128
+        """
+
+        if self.mlp_layer == 3:        
+            compressed_vector = self.weight_linear_layer_1(pooled_vectors) # N x 256
+            compressed_vector = self.weight_activation_function(compressed_vector)
+            compressed_vector = self.mlp_dropout(compressed_vector)
+        
+            compressed_vector = self.weight_linear_layer_2(compressed_vector) # N x 128
+        else:
+            compressed_vector = self.weight_linear_layer_2(pooled_vectors) # N x 128
+        
         compressed_vector = self.weight_activation_function(compressed_vector)
         compressed_vector = self.mlp_dropout(compressed_vector)
         
-        compressed_vector = self.weight_linear_layer_2(compressed_vector) # N x 64
-        compressed_vector = self.weight_activation_function(compressed_vector)
-        compressed_vector = self.mlp_dropout(compressed_vector)
-        
-        compressed_vector = self.weight_linear_layer_3(compressed_vector) # N x 32
+        compressed_vector = self.weight_linear_layer_3(compressed_vector) # N x 64
         compressed_vector = self.weight_activation_function(compressed_vector)
         compressed_vector = self.mlp_dropout(compressed_vector)
             

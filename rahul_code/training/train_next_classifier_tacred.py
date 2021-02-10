@@ -114,6 +114,9 @@ def main():
     parser.add_argument('--use_adagrad',
                         action='store_true',
                         help="use adagrad optimizer")
+    parser.add_argument('--mlp_layer',
+                        type=int,
+                        default=3)
     
     args = parser.parse_args()
 
@@ -170,7 +173,7 @@ def main():
     find_module.load_state_dict(torch.load(args.find_module_path))
 
     clf = BiLSTM_Att_Clf.BiLSTM_Att_Clf(vocab.vectors, pad_idx, args.emb_dim, args.hidden_dim,
-                                        torch.cuda.is_available(), number_of_classes)
+                                        torch.cuda.is_available(), number_of_classes, mlp_layer=args.mlp_layer)
     
     del vocab
 
