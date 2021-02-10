@@ -120,6 +120,7 @@ def main():
     torch.manual_seed(args.seed)
     random.seed(args.seed)
     lower_bound = -20.0
+    find_module_hidden_dim = 300
     dataset = "tacred"
     save_string = generate_save_string(args.embeddings)
 
@@ -164,7 +165,7 @@ def main():
     else:
         device = torch.device("cpu")
     
-    find_module = Find_Module.Find_Module(vocab.vectors, pad_idx, args.emb_dim, args.hidden_dim,
+    find_module = Find_Module.Find_Module(vocab.vectors, pad_idx, args.emb_dim, find_module_hidden_dim,
                                           torch.cuda.is_available())
         
     find_module.load_state_dict(torch.load(args.find_module_path))
@@ -295,7 +296,7 @@ def main():
             
                 function_batch_scores_tensor = torch.cat(function_batch_scores, dim=0).detach().permute(1,0) # B x Q
                 unlabeled_label_index = torch.argmax(function_batch_scores_tensor, dim=1) # B
-
+                
                 unlabeled_labels = torch.tensor([soft_labeling_function_labels[index] for index in unlabeled_label_index]).to(device).detach() # B
                 unlabeled_label_weights = nn.functional.softmax(torch.amax(function_batch_scores_tensor, dim=1), dim=0) * 10 # B
             
