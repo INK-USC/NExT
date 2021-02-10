@@ -261,7 +261,7 @@ def main():
         find_module.eval()
 
         for step, batch_pair in enumerate(tqdm(zip(strict_match_data.as_batches(batch_size=args.match_batch_size, seed=epoch),\
-                                                   unlabeled_data.as_batches(batch_size=args.unlabeled_batch_size, seed=epoch)))):
+                                                   unlabeled_data.as_batches(batch_size=args.unlabeled_batch_size)))):
             
             # prepping batch data
             strict_match_data_batch, unlabeled_data_batch = batch_pair
@@ -269,56 +269,57 @@ def main():
             strict_match_data_batch = [r.to(device) for r in strict_match_data_batch]
             strict_match_tokens, strict_match_labels  = strict_match_data_batch
 
-            unlabeled_tokens, phrases = unlabeled_data_batch
-            unlabeled_tokens = unlabeled_tokens.to(device)
+            # unlabeled_tokens, phrases = unlabeled_data_batch
+            # unlabeled_tokens = unlabeled_tokens.to(device)
 
-            phrase_input = build_phrase_input(phrases, pad_idx).to(device).detach()
-            _, seq_length = unlabeled_tokens.shape
-            mask_mat = build_mask_mat_for_batch(seq_length).to(device).detach()
+            # phrase_input = build_phrase_input(phrases, pad_idx).to(device).detach()
+            # _, seq_length = unlabeled_tokens.shape
+            # mask_mat = build_mask_mat_for_batch(seq_length).to(device).detach()
 
-            # clear previously calculated gradients 
-            clf.zero_grad()  
+            # # clear previously calculated gradients 
+            # clf.zero_grad()  
             
-            with torch.no_grad():
-                lfind_output = find_module.soft_matching_forward(unlabeled_tokens.detach(), lfind_query_tokens, lower_bound).detach() # B x seq_len x Q
+            # with torch.no_grad():
+            #     lfind_output = find_module.soft_matching_forward(unlabeled_tokens.detach(), lfind_query_tokens, lower_bound).detach() # B x seq_len x Q
             
-                function_batch_scores = []
-                for pair in soft_labeling_functions:
-                    func, rel = pair
-                    try:
-                        batch_scores = func(lfind_output, quoted_words_to_index, mask_mat)(phrase_input).detach() # 1 x B
-                    except:
-                        batch_scores = torch.zeros((1, args.unlabeled_batch_size)).to(device).detach()
-                    type_restrict_multiplier = batch_type_restrict(rel, phrase_input).detach() # 1 x B
-                    final_scores = batch_scores * type_restrict_multiplier # 1 x B
-                    function_batch_scores.append(final_scores)
+            #     function_batch_scores = []
+            #     for pair in soft_labeling_functions:
+            #         func, rel = pair
+            #         try:
+            #             batch_scores = func(lfind_output, quoted_words_to_index, mask_mat)(phrase_input).detach() # 1 x B
+            #         except:
+            #             batch_scores = torch.zeros((1, args.unlabeled_batch_size)).to(device).detach()
+            #         type_restrict_multiplier = batch_type_restrict(rel, phrase_input).detach() # 1 x B
+            #         final_scores = batch_scores * type_restrict_multiplier # 1 x B
+            #         function_batch_scores.append(final_scores)
             
-                function_batch_scores_tensor = torch.cat(function_batch_scores, dim=0).detach().permute(1,0) # B x Q
-                unlabeled_label_index = torch.argmax(function_batch_scores_tensor, dim=1) # B
+            #     function_batch_scores_tensor = torch.cat(function_batch_scores, dim=0).detach().permute(1,0) # B x Q
+            #     unlabeled_label_index = torch.argmax(function_batch_scores_tensor, dim=1) # B
                 
-                unlabeled_labels = torch.tensor([soft_labeling_function_labels[index] for index in unlabeled_label_index]).to(device).detach() # B
-                unlabeled_label_weights = nn.functional.softmax(torch.amax(function_batch_scores_tensor, dim=1), dim=0) # B
+            #     unlabeled_labels = torch.tensor([soft_labeling_function_labels[index] for index in unlabeled_label_index]).to(device).detach() # B
+            #     unlabeled_label_weights = nn.functional.softmax(torch.amax(function_batch_scores_tensor, dim=1), dim=0) # B
             
             strict_match_predictions = clf.forward(strict_match_tokens)
-            soft_match_predictions = clf.forward(unlabeled_tokens)
+            # soft_match_predictions = clf.forward(unlabeled_tokens)
             # lsim_pos_scores, lsim_neg_scores = model.sim_forward(lsim_query_tokens, query_index_matrix, neg_query_index_matrix)
 
             strict_match_loss = strict_match_loss_function(strict_match_predictions, strict_match_labels)
-            soft_match_loss = torch.sum(soft_match_loss_function(soft_match_predictions, unlabeled_labels) * unlabeled_label_weights)
+            # soft_match_loss = torch.sum(soft_match_loss_function(soft_match_predictions, unlabeled_labels) * unlabeled_label_weights)
             # sim_loss = sim_loss_function(lsim_pos_scores, lsim_neg_scores)
             # combined_loss = strict_match_loss + args.gamma * soft_match_loss + args.beta * sim_loss
-            combined_loss = strict_match_loss + args.gamma * soft_match_loss
+            # combined_loss = strict_match_loss + args.gamma * soft_match_loss
 
             strict_total_loss = strict_total_loss + strict_match_loss.item()
-            soft_total_loss = soft_total_loss + soft_match_loss.item()
+            # soft_total_loss = soft_total_loss + soft_match_loss.item()
             # sim_total_loss = sim_total_loss + sim_loss.item()
-            total_loss = total_loss + combined_loss.item()
+            # total_loss = total_loss + combined_loss.item()
             batch_count += 1
 
             if batch_count % 50 == 0 and batch_count > 0:
                 print((total_loss, strict_total_loss, soft_total_loss, sim_total_loss,  batch_count))
             
-            combined_loss.backward()
+            # combined_loss.backward()
+            strict_match_loss.backward()
             torch.nn.utils.clip_grad_norm_(clf.parameters(), 1.0)
 
             optimizer.step()
