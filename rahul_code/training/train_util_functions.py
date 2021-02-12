@@ -300,9 +300,10 @@ def evaluate_next_clf(data_path, model, strict_loss_fn, label_map, no_relation_t
             # sim_loss = sim_loss_fn(lsim_pos_scores, lsim_neg_scores)
 
             class_probs = nn.functional.softmax(preds, dim=1)
-            entropy = torch.sum(class_probs * -1.0 * torch.log(class_probs), axis=1).cpu().numpy()
+            max_probs = torch.max(class_probs, dim=1).values.cpu().numpy()
+            # entropy = torch.sum(class_probs * -1.0 * torch.log(class_probs), axis=1).cpu().numpy()
             class_preds = torch.argmax(class_probs, dim=1).cpu().numpy()
-            final_class_preds = _apply_no_relation_label(entropy, class_preds, label_map,\
+            final_class_preds = _apply_no_relation_label(max_probs, class_preds, label_map,\
                                                          no_relation_key, no_relation_threshold)
             
             f1_labels = batch_labels.cpu().numpy()
@@ -337,10 +338,11 @@ def prep_and_tune_no_relation_threshold(model, eval_dataset, device, batch_size,
         with torch.no_grad():
             preds = model.forward(tokens) # b x c
             class_probs = nn.functional.softmax(preds, dim=1)
-            entropy = torch.sum(class_probs * -1.0 * torch.log(class_probs), axis=1)
+            max_probs = torch.max(class_probs, dim=1).values
+            # entropy = torch.sum(class_probs * -1.0 * torch.log(class_probs), axis=1)
             class_preds = torch.argmax(class_probs, dim=1)
             
-            entropy_values.append(entropy.cpu().numpy())
+            entropy_values.append(max_probs.cpu().numpy())
             predict_labels.append(class_preds.cpu().numpy())
             labels.append(batch_labels.cpu().numpy())
     
