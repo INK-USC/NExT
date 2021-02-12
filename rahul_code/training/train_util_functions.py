@@ -294,7 +294,7 @@ def evaluate_next_clf(data_path, model, label_map, no_relation_thresholds=None,
     
     if no_relation_thresholds == None:
         no_relation_thresholds = prep_and_tune_no_relation_threshold(model, eval_dataset, device, batch_size,\
-                                                                    label_map, label_space, no_relation_key)
+                                                                    label_map, no_relation_key)
     
     entropy_threshold, max_value_threshold = no_relation_thresholds
 
