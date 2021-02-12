@@ -336,7 +336,7 @@ def evaluate_next_clf(data_path, model, label_map, no_relation_thresholds=None,
 def prep_and_tune_no_relation_threshold(model, eval_dataset, device, batch_size, label_map, no_relation_key):
     
     if len(no_relation_key) == 0:
-        return int(-1.0 * np.log(1/len(label_map)) / step) + 1, 0.0
+        return int(-1.0 * np.log(1/len(label_map))) + 1, -1.0
     
     entropy_values = []
     max_prob_values = []

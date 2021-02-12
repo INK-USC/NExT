@@ -43,29 +43,29 @@ class BiLSTM_Att_Clf(nn.Module):
         self.encoding_dropout = nn.Dropout(p=encoding_dropout)
         
         self.attention_matrix = nn.Linear(self.encoding_dim, self.encoding_dim)
-        # nn.init.xavier_uniform_(self.attention_matrix.weight)
+        nn.init.xavier_uniform_(self.attention_matrix.weight)
         self.attention_activation = nn.Tanh()
         self.attention_vector = nn.Linear(self.encoding_dim, 1, bias=False)
-        # nn.init.kaiming_uniform_(self.attention_vector.weight, mode='fan_in')
+        nn.init.kaiming_uniform_(self.attention_vector.weight, mode='fan_in')
         self.attn_softmax = nn.Softmax(dim=2)
 
         if self.mlp_layer == 3:
             self.weight_linear_layer_1 = nn.Linear(self.encoding_dim, 256)
-            # nn.init.kaiming_uniform_(self.weight_linear_layer_1.weight, a=0.01, mode='fan_in')
+            nn.init.kaiming_uniform_(self.weight_linear_layer_1.weight, a=0.01, mode='fan_in')
             self.weight_linear_layer_2 = nn.Linear(256, 128)
-            # nn.init.kaiming_uniform_(self.weight_linear_layer_2.weight, a=0.01, mode='fan_in')
+            nn.init.kaiming_uniform_(self.weight_linear_layer_2.weight, a=0.01, mode='fan_in')
         else:
             self.weight_linear_layer_2 = nn.Linear(self.encoding_dim, 128)
-            # nn.init.kaiming_uniform_(self.weight_linear_layer_2.weight, a=0.01, mode='fan_in')
+            nn.init.kaiming_uniform_(self.weight_linear_layer_2.weight, a=0.01, mode='fan_in')
         
         self.weight_linear_layer_3 = nn.Linear(128, 64)
-        # nn.init.kaiming_uniform_(self.weight_linear_layer_3.weight, a=0.01, mode='fan_in')
+        nn.init.kaiming_uniform_(self.weight_linear_layer_3.weight, a=0.01, mode='fan_in')
         
         self.weight_activation_function = nn.LeakyReLU()
         self.mlp_dropout = nn.Dropout(p=0.2)
 
         self.weight_final_layer = nn.Linear(64, self.number_of_classes)
-        # nn.init.kaiming_uniform_(self.weight_final_layer.weight, a=0.01, mode='fan_in')
+        nn.init.kaiming_uniform_(self.weight_final_layer.weight, a=0.01, mode='fan_in')
     
     def get_attention_weights(self, hidden_states, padding_indexes=None):
         """
