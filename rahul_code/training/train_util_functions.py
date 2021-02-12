@@ -263,13 +263,17 @@ def build_datasets_from_splits(train_path, dev_path, test_path, vocab_path, expl
         dill.dump({"function_pairs" : soft_matching_functions,
                      "labels" : function_labels}, f)
 
-def _apply_no_relation_label(entropy, preds, label_map, no_relation_key, threshold):
-    no_relation_mask = entropy > threshold
+def _apply_no_relation_label(values, preds, label_map, no_relation_key, threshold, entropy=True):
+    if entropy:
+        no_relation_mask = values > threshold
+    else:
+        no_relation_mask = values < threshold
+
     final_preds = [label_map[no_relation_key] if mask else preds[i] for i, mask in enumerate(no_relation_mask)]
 
     return final_preds
 
-def evaluate_next_clf(data_path, model, strict_loss_fn, label_map, no_relation_threshold=None,
+def evaluate_next_clf(data_path, model, label_map, no_relation_thresholds=None,
                       batch_size=128, gamma=0.7, beta=0.5, no_relation_key="no_relation"):
 
     with open(data_path, "rb") as f:
@@ -283,10 +287,13 @@ def evaluate_next_clf(data_path, model, strict_loss_fn, label_map, no_relation_t
     else:
         device = torch.device("cpu")
     
-    if no_relation_threshold == None:
-        no_relation_threshold = prep_and_tune_no_relation_threshold(model, eval_dataset, device, batch_size,\
+    if no_relation_thresholds == None:
+        no_relation_thresholds = prep_and_tune_no_relation_threshold(model, eval_dataset, device, batch_size,\
                                                                     label_map, no_relation_key)
-    strict_total_loss, sim_total_loss, total_f1_score = 0, 0, 0
+    
+    entropy_threshold, max_value_threshold = no_relation_thresholds
+
+    total_ent_f1_score, total_val_f1_score = 0, 0
     total_class_probs = []
     batch_count = 0
     for step, batch in enumerate(tqdm(eval_dataset.as_batches(batch_size=batch_size, shuffle=False))):
@@ -294,36 +301,36 @@ def evaluate_next_clf(data_path, model, strict_loss_fn, label_map, no_relation_t
         tokens, batch_labels = batch
         with torch.no_grad():
             preds = model.forward(tokens)
-            # lsim_pos_scores, lsim_neg_scores = model.sim_forward(queries, query_index_matrix, neg_query_index_matrix)
-
-            # strict_loss = strict_loss_fn(preds, batch_labels)
-            # sim_loss = sim_loss_fn(lsim_pos_scores, lsim_neg_scores)
 
             class_probs = nn.functional.softmax(preds, dim=1)
             max_probs = torch.max(class_probs, dim=1).values.cpu().numpy()
-            # entropy = torch.sum(class_probs * -1.0 * torch.log(class_probs), axis=1).cpu().numpy()
+            entropy = torch.sum(class_probs * -1.0 * torch.log(class_probs), axis=1).cpu().numpy()
             class_preds = torch.argmax(class_probs, dim=1).cpu().numpy()
-            final_class_preds = _apply_no_relation_label(max_probs, class_preds, label_map,\
-                                                         no_relation_key, no_relation_threshold)
+            
+            entropy_final_class_preds = _apply_no_relation_label(max_probs, class_preds, label_map,\
+                                                                 no_relation_key, entropy_threshold)
+
+            max_value_final_class_preds = _apply_no_relation_label(max_probs, class_preds, label_map,\
+                                                                   no_relation_key, max_value_threshold, False)
             
             f1_labels = batch_labels.cpu().numpy()
-            f1_score = metrics.f1_score(f1_labels, final_class_preds, average='macro')
+            entropy_f1_score = metrics.f1_score(f1_labels, entropy_final_class_preds, average='macro')
+            max_value_f1_score = metrics.f1_score(f1_labels, max_value_final_class_preds, average='macro')
 
-            # strict_total_loss += strict_loss.item()
-            # sim_total_loss += sim_loss.item()
-            total_f1_score += f1_score
+            total_ent_f1_score += entropy_f1_score
+            total_val_f1_score += max_value_f1_score
             batch_count += 1
             total_class_probs.append(class_probs.cpu().numpy())
     
-    # avg_strict_loss = strict_total_loss / batch_count
-    # avg_sim_loss = sim_total_loss / batch_count
-    avg_f1_score = total_f1_score / batch_count
+    avg_ent_f1_score = total_ent_f1_score / batch_count
+    avg_val_f1_score = total_val_f1_score / batch_count
     total_class_probs = np.concatenate(total_class_probs, axis=0)
 
-    return 0.0, 0.0, avg_f1_score, total_class_probs, no_relation_threshold
+    return avg_ent_f1_score, avg_val_f1_score, total_class_probs, no_relation_thresholds
 
 def prep_and_tune_no_relation_threshold(model, eval_dataset, device, batch_size, label_map, no_relation_key):
     entropy_values = []
+    max_prob_values = []
     predict_labels = []
     labels = []
     
@@ -339,29 +346,38 @@ def prep_and_tune_no_relation_threshold(model, eval_dataset, device, batch_size,
             preds = model.forward(tokens) # b x c
             class_probs = nn.functional.softmax(preds, dim=1)
             max_probs = torch.max(class_probs, dim=1).values
-            # entropy = torch.sum(class_probs * -1.0 * torch.log(class_probs), axis=1)
+            entropy = torch.sum(class_probs * -1.0 * torch.log(class_probs), axis=1)
             class_preds = torch.argmax(class_probs, dim=1)
             
-            entropy_values.append(max_probs.cpu().numpy())
+            entropy_values.append(entropy.cpu().numpy())
+            max_prob_values.append(max_probs.cpu().numpy())
             predict_labels.append(class_preds.cpu().numpy())
             labels.append(batch_labels.cpu().numpy())
     
     entropy_values = np.concatenate(entropy_values).ravel()
+    max_prob_values = np.concatenate(max_prob_values).ravel()
     predict_labels = np.concatenate(predict_labels).ravel()
     labels = np.concatenate(labels).ravel()
 
-    no_relation_threshold, _ = tune_no_relation_threshold(entropy_values, predict_labels, labels, label_map,\
-                                                          no_relation_key)
-    return no_relation_threshold
+    no_relation_threshold_entropy, _ = tune_no_relation_threshold(entropy_values, predict_labels, labels,\
+                                                                  label_map, no_relation_key)
+
+    no_relation_threshold_max_value, _ = tune_no_relation_threshold(max_prob_values, predict_labels, labels,\
+                                                                    label_map, no_relation_key, False)
+
+    return no_relation_threshold_entropy, no_relation_threshold_max_value
     
-def tune_no_relation_threshold(entropy, preds, labels, label_map, no_relation_key="no_relation"):
+def tune_no_relation_threshold(values, preds, labels, label_map, no_relation_key="no_relation", entropy=True):
     step = 0.01
-    max_entropy_cut_off = int(-1.0 * np.log(1/len(label_map)) / step) + 1
-    thresholds = [0.01 * i for i in range(1, max_entropy_cut_off)]
+    if entropy:
+        max_entropy_cut_off = int(-1.0 * np.log(1/len(label_map)) / step) + 1
+        thresholds = [0.01 * i for i in range(1, max_entropy_cut_off)]
+    else:
+        thresholds = [0.01 * i for i in range(1, 99)]
     best_f1 = 0
     best_threshold = -1
     for threshold in thresholds:
-        final_preds = _apply_no_relation_label(entropy, preds, label_map, no_relation_key, threshold)
+        final_preds = _apply_no_relation_label(values, preds, label_map, no_relation_key, threshold, entropy)
         f1_score = metrics.f1_score(labels, final_preds, average='macro')
 
         if f1_score > best_f1:

@@ -164,31 +164,28 @@ def main():
 
     epochs = args.epochs
     epoch_string = str(epochs)
-    test_epoch_losses = []
-    dev_epoch_losses = []
+    test_epoch_f1_scores = []
+    dev_epoch_f1_scores = []
     best_test_f1_score = -1
     best_dev_f1_score = -1
-    best_test_strict_loss = float('inf')
 
     if args.load_clf_model:
         clf.load_state_dict(torch.load("../data/saved_models/Clf_{}.p".format(args.experiment_name)))
         print("loaded model")
 
-        with open("../data/result_data/test_loss_per_epoch_Clf_{}.csv".format(args.experiment_name)) as f:
+        with open("../data/result_data/test_f1_per_epoch_Clf_{}.csv".format(args.experiment_name)) as f:
             reader=csv.reader(f)
             next(reader)
             for row in reader:
-                test_epoch_losses.append(row)
+                test_epoch_f1_scores.append(row)
                 if float(row[-1]) > best_test_f1_score:
                     best_test_f1_score = float(row[-1])
-                if float(row[0]) < best_test_strict_loss:
-                    best_test_strict_loss = float(row[0])
         
-        with open("../data/result_data/dev_loss_per_epoch_Clf_{}.csv".format(args.experiment_name)) as f:
+        with open("../data/result_data/dev_f1_per_epoch_Clf_{}.csv".format(args.experiment_name)) as f:
             reader=csv.reader(f)
             next(reader)
             for row in reader:
-                dev_epoch_losses.append(row)
+                dev_epoch_f1_scores.append(row)
                 if float(row[-1]) > best_dev_f1_score:
                     best_dev_f1_score = float(row[-1])
         
@@ -242,63 +239,61 @@ def main():
         loss_tuples = ("%.5f" % train_avg_loss, "%.5f" % train_avg_strict_loss, "%.5f" % train_avg_soft_loss, "%.5f" % train_avg_sim_loss)
         print("Avg Train Total Loss: {}, Avg Train Strict Loss: {}, Avg Train Soft Loss: {}, Avg Train Sim Loss: {}".format(*loss_tuples))
 
-        dev_results = evaluate_next_clf(dev_path, clf, strict_match_loss_function,\
-                                        TACRED_LABEL_MAP, batch_size=args.eval_batch_size)
+        dev_results = evaluate_next_clf(dev_path, clf, TACRED_LABEL_MAP, batch_size=args.eval_batch_size)
         
-        avg_dev_strict_loss, avg_dev_sim_loss, avg_dev_f1_score, total_dev_class_probs, no_relation_threshold = dev_results
+        avg_dev_ent_f1_score, avg_dev_val_f1_score, total_dev_class_probs, no_relation_thresholds = dev_results
 
         print("Dev Results")
-        dev_tuple = ("%.5f" % avg_dev_strict_loss, "%.5f" % avg_dev_sim_loss, "%.5f" % avg_dev_f1_score, str(no_relation_threshold))
-        print("Avg Dev Strict Loss: {}, Avg Dev Sim Loss: {}, Avg Dev F1 Score: {}, Threshold: {}".format(*dev_tuple))
+        dev_tuple = ("%.5f" % avg_dev_ent_f1_score, "%.5f" % avg_dev_val_f1_score, str(no_relation_thresholds))
+        print("Avg Dev Entropy F1 Score: {}, Avg Dev Max Value F1 Score: {}, Thresholds: {}".format(*dev_tuple))
 
-        dev_epoch_losses.append((avg_dev_strict_loss, avg_dev_sim_loss, avg_dev_f1_score))
+        dev_epoch_f1_scores.append((avg_dev_ent_f1_score, avg_dev_val_f1_score, max(avg_dev_ent_f1_score, avg_dev_val_f1_score)))
         
-        if avg_dev_f1_score > best_dev_f1_score:
-            best_dev_f1_score = avg_dev_f1_score
+        if max(avg_dev_ent_f1_score, avg_dev_val_f1_score) > best_dev_f1_score:
+            best_dev_f1_score = max(avg_dev_ent_f1_score, avg_dev_val_f1_score)
             print("Updated Dev F1 Score")
         
-        test_results = evaluate_next_clf(test_path, clf, strict_match_loss_function,\
-                                         TACRED_LABEL_MAP, no_relation_threshold=no_relation_threshold,\
+        test_results = evaluate_next_clf(test_path, clf, TACRED_LABEL_MAP,\
+                                         no_relation_thresholds=no_relation_thresholds,\
                                          batch_size=args.eval_batch_size)
         
-        avg_test_strict_loss, avg_test_sim_loss, avg_test_f1_score, total_test_class_probs, _ = test_results
+        avg_test_ent_f1_score, avg_test_val_f1_score, total_test_class_probs, _ = test_results
 
         print("Test Results")
-        dev_tuple = ("%.5f" % avg_test_strict_loss, "%.5f" % avg_test_sim_loss, "%.5f" % avg_test_f1_score, str(no_relation_threshold))
-        print("Avg Test Strict Loss: {}, Avg Test Sim Loss: {}, Avg Test F1 Score: {}, Threshold: {}".format(*dev_tuple))
+        test_tuple = ("%.5f" % avg_test_ent_f1_score, "%.5f" % avg_test_val_f1_score, str(no_relation_thresholds))
+        print("Avg Test Entropy F1 Score: {}, Avg Test Max Value F1 Score: {}, Thresholds: {}".format(*test_tuple))
 
-        test_epoch_losses.append((avg_test_strict_loss, avg_test_sim_loss, avg_test_f1_score))
+        test_epoch_f1_scores.append((avg_test_ent_f1_score, avg_test_val_f1_score, max(avg_test_ent_f1_score, avg_test_val_f1_score)))
 
-        if best_test_f1_score < avg_test_f1_score or (best_test_f1_score == avg_test_f1_score and avg_test_strict_loss < best_test_strict_loss):
+        if best_test_f1_score < max(avg_test_ent_f1_score, avg_test_val_f1_score):
             print("Saving Model")
             if len(args.model_save_dir) > 0:
                 dir_name = args.model_save_dir
             else:
                 dir_name = "../data/saved_models/"
             torch.save(clf.state_dict(), "{}Clf_{}.p".format(dir_name, args.experiment_name))
-            with open("../data/result_data/test_loss_per_epoch_Clf_{}.csv".format(args.experiment_name), "wb") as f:
+            with open("../data/result_data/test_predictions_Clf_{}.csv".format(args.experiment_name), "wb") as f:
                 pickle.dump(total_test_class_probs, f)
-            with open("../data/result_data/dev_loss_per_epoch_Clf_{}.csv".format(args.experiment_name), "wb") as f:
+            with open("../data/result_data/dev_predictions_Clf_{}.csv".format(args.experiment_name), "wb") as f:
                 pickle.dump(total_dev_class_probs, f)
-            with open("../data/result_data/threshold.p", "wb") as f:
-                pickle.dump({"threshold" : no_relation_threshold}, f)
+            with open("../data/result_data/thresholds.p", "wb") as f:
+                pickle.dump({"thresholds" : no_relation_thresholds}, f)
             
-            best_test_f1_score = avg_test_f1_score
-            best_test_strict_loss = avg_test_strict_loss
+            best_test_f1_score = max(avg_test_ent_f1_score, avg_test_val_f1_score)
         
         print("Best Test F1: {}".format("%.5f" % best_test_f1_score))
-        print(test_epoch_losses[-3:])
+        print(test_epoch_f1_scores[-3:])
     
-    with open("../data/result_data/dev_loss_per_epoch_Clf_{}.csv".format(args.experiment_name), "w") as f:
+    with open("../data/result_data/dev_f1_per_epoch_Clf_{}.csv".format(args.experiment_name), "w") as f:
         writer=csv.writer(f)
-        writer.writerow(['strict_loss','sim_loss', 'f1_score'])
-        for row in dev_epoch_losses:
+        writer.writerow(['entropy_f1_score','max_value_f1_score', 'max'])
+        for row in dev_epoch_f1_scores:
             writer.writerow(row)
     
-    with open("../data/result_data/test_loss_per_epoch_Clf_{}.csv".format(args.experiment_name), "w") as f:
+    with open("../data/result_data/test_f1_per_epoch_Clf_{}.csv".format(args.experiment_name), "w") as f:
         writer=csv.writer(f)
-        writer.writerow(['strict_loss','sim_loss', 'f1_score'])
-        for row in test_epoch_losses:
+        writer.writerow(['entropy_f1_score','max_value_f1_score', 'max'])
+        for row in test_epoch_f1_scores:
             writer.writerow(row)
 
 if __name__ == "__main__":
