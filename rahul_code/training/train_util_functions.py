@@ -274,7 +274,12 @@ def _apply_no_relation_label(values, preds, label_map, no_relation_key, threshol
     return final_preds
 
 def evaluate_next_clf(data_path, model, label_map, no_relation_thresholds=None,
-                      batch_size=128, gamma=0.7, beta=0.5, no_relation_key="no_relation"):
+                      batch_size=128, no_relation_key="no_relation"):
+
+    if len(no_relation_key) == 0:
+        label_space = [i for i in range(0,41)]
+    else:
+        label_space = [i for i in range(0,42)]
 
     with open(data_path, "rb") as f:
         eval_dataset = pickle.load(f)
@@ -289,7 +294,7 @@ def evaluate_next_clf(data_path, model, label_map, no_relation_thresholds=None,
     
     if no_relation_thresholds == None:
         no_relation_thresholds = prep_and_tune_no_relation_threshold(model, eval_dataset, device, batch_size,\
-                                                                    label_map, no_relation_key)
+                                                                    label_map, label_space, no_relation_key)
     
     entropy_threshold, max_value_threshold = no_relation_thresholds
 
@@ -314,8 +319,8 @@ def evaluate_next_clf(data_path, model, label_map, no_relation_thresholds=None,
                                                                    no_relation_key, max_value_threshold, False)
             
             f1_labels = batch_labels.cpu().numpy()
-            entropy_f1_score = metrics.f1_score(f1_labels, entropy_final_class_preds, average='macro')
-            max_value_f1_score = metrics.f1_score(f1_labels, max_value_final_class_preds, average='macro')
+            entropy_f1_score = metrics.f1_score(f1_labels, entropy_final_class_preds, labels=label_space, average='macro')
+            max_value_f1_score = metrics.f1_score(f1_labels, max_value_final_class_preds, labels=label_space, average='macro')
 
             total_ent_f1_score += entropy_f1_score
             total_val_f1_score += max_value_f1_score
@@ -329,6 +334,10 @@ def evaluate_next_clf(data_path, model, label_map, no_relation_thresholds=None,
     return avg_ent_f1_score, avg_val_f1_score, total_class_probs, no_relation_thresholds
 
 def prep_and_tune_no_relation_threshold(model, eval_dataset, device, batch_size, label_map, no_relation_key):
+    
+    if len(no_relation_key) == 0:
+        return int(-1.0 * np.log(1/len(label_map)) / step) + 1, 0.0
+    
     entropy_values = []
     max_prob_values = []
     predict_labels = []

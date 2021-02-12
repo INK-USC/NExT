@@ -117,6 +117,8 @@ def main():
     parser.add_argument('--mlp_layer',
                         type=int,
                         default=3)
+    parser.add_argument('--exclude_no_relation',
+                        action='store_true')
     
     args = parser.parse_args()
 
@@ -239,7 +241,12 @@ def main():
         loss_tuples = ("%.5f" % train_avg_loss, "%.5f" % train_avg_strict_loss, "%.5f" % train_avg_soft_loss, "%.5f" % train_avg_sim_loss)
         print("Avg Train Total Loss: {}, Avg Train Strict Loss: {}, Avg Train Soft Loss: {}, Avg Train Sim Loss: {}".format(*loss_tuples))
 
-        dev_results = evaluate_next_clf(dev_path, clf, TACRED_LABEL_MAP, batch_size=args.eval_batch_size)
+        if args.exclude_no_relation:
+            no_relation_key = ""
+        else:
+            no_relation_key = "no_relation"
+
+        dev_results = evaluate_next_clf(dev_path, clf, TACRED_LABEL_MAP, batch_size=args.eval_batch_size, no_relation_key=no_relation_key)
         
         avg_dev_ent_f1_score, avg_dev_val_f1_score, total_dev_class_probs, no_relation_thresholds = dev_results
 
@@ -255,7 +262,7 @@ def main():
         
         test_results = evaluate_next_clf(test_path, clf, TACRED_LABEL_MAP,\
                                          no_relation_thresholds=no_relation_thresholds,\
-                                         batch_size=args.eval_batch_size)
+                                         batch_size=args.eval_batch_size, no_relation_key=no_relation_key)
         
         avg_test_ent_f1_score, avg_test_val_f1_score, total_test_class_probs, _ = test_results
 
