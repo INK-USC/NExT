@@ -62,7 +62,7 @@ class BiLSTM_Att_Clf(nn.Module):
         nn.init.kaiming_uniform_(self.weight_linear_layer_3.weight, a=0.01, mode='fan_in')
         
         self.weight_activation_function = nn.LeakyReLU()
-        self.mlp_dropout = nn.Dropout(p=0.5)
+        self.mlp_dropout = nn.Dropout(p=0.2)
 
         self.weight_final_layer = nn.Linear(64, self.number_of_classes)
         nn.init.kaiming_uniform_(self.weight_final_layer.weight, a=0.01, mode='fan_in')
