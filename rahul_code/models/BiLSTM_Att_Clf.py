@@ -4,7 +4,7 @@ import torch.nn.functional as f
 
 class BiLSTM_Att_Clf(nn.Module):
     def __init__(self, emb_weight, padding_idx, emb_dim, hidden_dim, cuda, number_of_classes,
-                 n_layers=2, encoding_dropout=0.5, padding_score=-1e30, add_subj_obj=True, mlp_layer=3):
+                 n_layers=1, encoding_dropout=0.5, padding_score=-1e30, add_subj_obj=True, mlp_layer=3):
         """
             Arguments:
                 emb_weight (torch.tensor) : created vocabulary's vector representation for each token, where
@@ -39,7 +39,7 @@ class BiLSTM_Att_Clf(nn.Module):
 
         self.embeddings = nn.Embedding.from_pretrained(emb_weight, freeze=False, padding_idx=self.padding_idx)
         self.encoding_bilstm = nn.LSTM(self.emb_dim, self.hidden_dim, num_layers=n_layers,
-                                       bidirectional=True, batch_first=True, dropout=encoding_dropout)
+                                       bidirectional=True, batch_first=True)
         self.encoding_dropout = nn.Dropout(p=encoding_dropout)
         
         self.attention_matrix = nn.Linear(self.encoding_dim, self.encoding_dim)
