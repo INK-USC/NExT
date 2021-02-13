@@ -39,7 +39,7 @@ class BiLSTM_Att_Clf(nn.Module):
 
         self.embeddings = nn.Embedding.from_pretrained(emb_weight, freeze=False, padding_idx=self.padding_idx)
         self.encoding_bilstm = nn.LSTM(self.emb_dim, self.hidden_dim, num_layers=n_layers,
-                                       bidirectional=True, batch_first=True)
+                                       bidirectional=True, batch_first=True, dropout=encoding_dropout)
         self.encoding_dropout = nn.Dropout(p=encoding_dropout)
         
         self.attention_matrix = nn.Linear(self.encoding_dim, self.encoding_dim)
@@ -133,6 +133,7 @@ class BiLSTM_Att_Clf(nn.Module):
                 seq_embs, padding_indexes : N x seq_len x encoding_dim, N x seq_len
         """
         seq_embs, padding_indexes = self.get_embeddings(seqs) # N x seq_len x embedding_dim, N, seq_len
+        seq_embs = self.encoding_dropout(seq_embs)
         seq_encodings, _ = self.encoding_bilstm(seq_embs) # N x seq_len, encoding_dim
         seq_encodings = self.encoding_dropout(seq_encodings)
         
