@@ -17,6 +17,7 @@ import numpy as np
 import dill
 import pdb
 from tqdm import tqdm
+import numpy as np
 
 nlp = spacy.load("en_core_web_sm")
 
@@ -298,6 +299,9 @@ def evaluate_next_clf(data_path, model, label_map, no_relation_thresholds=None,
     total_ent_f1_score, total_val_f1_score = 0, 0
     total_class_probs = []
     batch_count = 0
+    true_labels = []
+    entropy_predictions = []
+    max_val_predictions = []
     for step, batch in enumerate(tqdm(eval_dataset.as_batches(batch_size=batch_size, shuffle=False))):
         batch = [r.to(device) for r in batch]
         tokens, batch_labels = batch
@@ -314,18 +318,16 @@ def evaluate_next_clf(data_path, model, label_map, no_relation_thresholds=None,
 
             max_value_final_class_preds = _apply_no_relation_label(max_probs, class_preds, label_map,\
                                                                    no_relation_key, max_value_threshold, False)
-            
             f1_labels = batch_labels.cpu().numpy()
-            _, _, entropy_f1_score = tacred_eval(entropy_final_class_preds, f1_labels)
-            _, _, max_value_f1_score = tacred_eval(max_value_final_class_preds, f1_labels)
-
-            total_ent_f1_score += entropy_f1_score
-            total_val_f1_score += max_value_f1_score
+            entropy_predictions.append(entropy_final_class_preds)
+            max_val_predictions.append(max_value_final_class_preds)
+            true_labels.append(f1_labels)
+            
             batch_count += 1
             total_class_probs.append(class_probs.cpu().numpy())
     
-    avg_ent_f1_score = total_ent_f1_score / batch_count
-    avg_val_f1_score = total_val_f1_score / batch_count
+    _, _, avg_ent_f1_score = tacred_eval(list(np.concatenate(entropy_predictions)), list(np.concatenate(true_labels)))
+    _, _, avg_val_f1_score = tacred_eval(list(np.concatenate(max_val_predictions)), list(np.concatenate(true_labels)))
     total_class_probs = np.concatenate(total_class_probs, axis=0)
 
     return avg_ent_f1_score, avg_val_f1_score, total_class_probs, no_relation_thresholds
