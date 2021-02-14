@@ -79,7 +79,7 @@ def main():
                         help="initial embeddings to use")
     parser.add_argument('--seed',
                         type=int,
-                        default=42,
+                        default=7698,
                         help="random seed for initialization")
     parser.add_argument('--gamma',
                         type=float,

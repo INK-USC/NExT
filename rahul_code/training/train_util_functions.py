@@ -291,7 +291,7 @@ def evaluate_next_clf(data_path, model, label_map, no_relation_thresholds=None,
     
     if no_relation_thresholds == None:
         no_relation_thresholds = prep_and_tune_no_relation_threshold(model, eval_dataset, device, batch_size,\
-                                                                    label_map, label_space, no_relation_key)
+                                                                    label_map, no_relation_key)
     
     entropy_threshold, max_value_threshold = no_relation_thresholds
 
@@ -316,8 +316,8 @@ def evaluate_next_clf(data_path, model, label_map, no_relation_thresholds=None,
                                                                    no_relation_key, max_value_threshold, False)
             
             f1_labels = batch_labels.cpu().numpy()
-            entropy_f1_score = metrics.f1_score(f1_labels, entropy_final_class_preds, labels=label_space, average='micro')
-            max_value_f1_score = metrics.f1_score(f1_labels, max_value_final_class_preds, labels=label_space, average='micro')
+            _, _, entropy_f1_score = tacred_eval(entropy_final_class_preds, f1_labels)
+            _, _, max_value_f1_score = tacred_eval(max_value_final_class_preds, f1_labels)
 
             total_ent_f1_score += entropy_f1_score
             total_val_f1_score += max_value_f1_score
@@ -330,7 +330,7 @@ def evaluate_next_clf(data_path, model, label_map, no_relation_thresholds=None,
 
     return avg_ent_f1_score, avg_val_f1_score, total_class_probs, no_relation_thresholds
 
-def prep_and_tune_no_relation_threshold(model, eval_dataset, device, batch_size, label_map, label_space, no_relation_key):
+def prep_and_tune_no_relation_threshold(model, eval_dataset, device, batch_size, label_map, no_relation_key):
     
     if len(no_relation_key) == 0:
         return int(-1.0 * np.log(1/len(label_map))) + 1, -1.0
@@ -366,15 +366,14 @@ def prep_and_tune_no_relation_threshold(model, eval_dataset, device, batch_size,
     labels = np.concatenate(labels).ravel()
 
     no_relation_threshold_entropy, _ = tune_no_relation_threshold(entropy_values, predict_labels, labels,\
-                                                                  label_map, label_space, no_relation_key)
+                                                                  label_map, no_relation_key)
 
     no_relation_threshold_max_value, _ = tune_no_relation_threshold(max_prob_values, predict_labels, labels,\
-                                                                    label_map, label_space, no_relation_key,\
-                                                                    False)
+                                                                    label_map, no_relation_key, False)
 
     return no_relation_threshold_entropy, no_relation_threshold_max_value
     
-def tune_no_relation_threshold(values, preds, labels, label_map, label_space, no_relation_key="no_relation", entropy=True):
+def tune_no_relation_threshold(values, preds, labels, label_map, no_relation_key="no_relation", entropy=True):
     step = 0.01
     if entropy:
         max_entropy_cut_off = int(-1.0 * np.log(1/len(label_map)) / step) + 1
@@ -385,10 +384,44 @@ def tune_no_relation_threshold(values, preds, labels, label_map, label_space, no
     best_threshold = -1
     for threshold in thresholds:
         final_preds = _apply_no_relation_label(values, preds, label_map, no_relation_key, threshold, entropy)
-        f1_score = metrics.f1_score(labels, final_preds, labels=label_space, average='micro')
+        _, _, f1_score = tacred_eval(final_preds, labels)
 
         if f1_score > best_f1:
             best_threshold = threshold
             best_f1 = f1_score
     
     return best_threshold, best_f1
+
+def tacred_eval(pred, labels):
+    correct_by_relation = 0
+    guessed_by_relation = 0
+    gold_by_relation = 0
+
+    # Loop over the data to compute a score
+    for idx in range(len(pred)):
+        gold = labels[idx]
+        guess = pred[idx]
+
+        if gold == TACRED_LABEL_MAP["no_relation"] and guess == TACRED_LABEL_MAP["no_relation"]:
+            pass
+        elif gold == TACRED_LABEL_MAP["no_relation"] and guess != TACRED_LABEL_MAP["no_relation"]:
+            guessed_by_relation += 1
+        elif gold != TACRED_LABEL_MAP["no_relation"] and guess == TACRED_LABEL_MAP["no_relation"]:
+            gold_by_relation += 1
+        elif gold != TACRED_LABEL_MAP["no_relation"] and guess != TACRED_LABEL_MAP["no_relation"]:
+            guessed_by_relation += 1
+            gold_by_relation += 1
+        if gold == guess:
+            correct_by_relation += 1
+
+    prec = 0.0
+    if guessed_by_relation > 0:
+        prec = float(correct_by_relation/guessed_by_relation)
+        recall = 0.0
+    if gold_by_relation > 0:
+        recall = float(correct_by_relation/gold_by_relation)
+        f1 = 0.0
+    if prec + recall > 0:
+        f1 = 2.0 * prec * recall / (prec + recall)
+
+    return prec, recall, f1

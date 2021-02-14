@@ -70,7 +70,7 @@ def main():
                         type=float,
                         help="The initial learning rate for Adam.")
     parser.add_argument("--epochs",
-                        default=20,
+                        default=30,
                         type=int,
                         help="Number of Epochs for training")
     parser.add_argument('--embeddings',
@@ -79,7 +79,7 @@ def main():
                         help="initial embeddings to use")
     parser.add_argument('--seed',
                         type=int,
-                        default=42,
+                        default=7698,
                         help="random seed for initialization")
     parser.add_argument('--gamma',
                         type=float,
@@ -222,7 +222,7 @@ def main():
                 print((total_loss, strict_total_loss, soft_total_loss, sim_total_loss,  batch_count))
             
             strict_match_loss.backward()
-            torch.nn.utils.clip_grad_norm_(clf.parameters(), 1.0)
+            torch.nn.utils.clip_grad_norm_(clf.parameters(), 5.0)
 
             optimizer.step()
 
