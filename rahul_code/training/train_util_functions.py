@@ -391,6 +391,7 @@ def tune_no_relation_threshold(values, preds, labels, label_map, no_relation_key
         final_preds = _apply_no_relation_label(values, preds, label_map, no_relation_key, threshold, entropy)
         _, _, f1_score = tacred_eval(final_preds, labels)
 
+
         if f1_score > best_f1:
             best_threshold = threshold
             best_f1 = f1_score
@@ -428,5 +429,8 @@ def tacred_eval(pred, labels):
         f1 = 0.0
     if prec + recall > 0:
         f1 = 2.0 * prec * recall / (prec + recall)
+    
+    if f1 > 1:
+        pdb.set_trace()
 
     return prec, recall, f1
