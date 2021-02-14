@@ -326,6 +326,7 @@ def evaluate_next_clf(data_path, model, label_map, no_relation_thresholds=None,
             batch_count += 1
             total_class_probs.append(class_probs.cpu().numpy())
     
+    pdb.set_trace()
     _, _, avg_ent_f1_score = tacred_eval(list(np.concatenate(entropy_predictions)), list(np.concatenate(true_labels)))
     _, _, avg_val_f1_score = tacred_eval(list(np.concatenate(max_val_predictions)), list(np.concatenate(true_labels)))
     total_class_probs = np.concatenate(total_class_probs, axis=0)
@@ -367,11 +368,13 @@ def prep_and_tune_no_relation_threshold(model, eval_dataset, device, batch_size,
     predict_labels = np.concatenate(predict_labels).ravel()
     labels = np.concatenate(labels).ravel()
 
-    no_relation_threshold_entropy, _ = tune_no_relation_threshold(entropy_values, predict_labels, labels,\
+    no_relation_threshold_entropy, best_f1 = tune_no_relation_threshold(entropy_values, predict_labels, labels,\
                                                                   label_map, no_relation_key)
+    print(best_f1)
 
-    no_relation_threshold_max_value, _ = tune_no_relation_threshold(max_prob_values, predict_labels, labels,\
+    no_relation_threshold_max_value, best_f1 = tune_no_relation_threshold(max_prob_values, predict_labels, labels,\
                                                                     label_map, no_relation_key, False)
+    print(best_f1)
 
     return no_relation_threshold_entropy, no_relation_threshold_max_value
     

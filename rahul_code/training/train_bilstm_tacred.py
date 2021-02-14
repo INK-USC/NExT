@@ -17,7 +17,6 @@ import numpy as np
 import argparse
 import random
 import csv
-import pdb
 import dill
 
 def main():
