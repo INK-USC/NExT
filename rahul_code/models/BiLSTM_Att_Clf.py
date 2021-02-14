@@ -4,7 +4,7 @@ import torch.nn.functional as f
 
 class BiLSTM_Att_Clf(nn.Module):
     def __init__(self, emb_weight, padding_idx, emb_dim, hidden_dim, cuda, number_of_classes,
-                 n_layers=1, encoding_dropout=0.7, padding_score=-1e30, add_subj_obj=True, mlp_layer=3):
+                 n_layers=2, encoding_dropout=0.5, padding_score=-1e30, add_subj_obj=True, mlp_layer=3):
         """
             Arguments:
                 emb_weight (torch.tensor) : created vocabulary's vector representation for each token, where
@@ -38,7 +38,7 @@ class BiLSTM_Att_Clf(nn.Module):
             emb_weight = torch.cat([emb_weight, subj_vector, obj_vector], dim=0)
 
         self.embeddings = nn.Embedding.from_pretrained(emb_weight, freeze=False, padding_idx=self.padding_idx)
-        self.encoding_bilstm = nn.LSTM(self.emb_dim, self.hidden_dim, num_layers=n_layers,
+        self.encoding_bilstm = nn.LSTM(self.emb_dim, self.hidden_dim, num_layers=n_layers, dropout=encoding_dropout,
                                        bidirectional=True, batch_first=True)
         self.encoding_dropout = nn.Dropout(p=encoding_dropout)
         
@@ -62,7 +62,7 @@ class BiLSTM_Att_Clf(nn.Module):
         # nn.init.kaiming_uniform_(self.weight_linear_layer_3.weight, a=0.01, mode='fan_in')
         
         # self.weight_activation_function = nn.LeakyReLU()
-        self.mlp_dropout = nn.Dropout(p=0.7)
+        self.mlp_dropout = nn.Dropout(p=0.5)
 
         self.weight_final_layer = nn.Linear(self.encoding_dim, self.number_of_classes)
         nn.init.kaiming_uniform_(self.weight_final_layer.weight, a=0.01, mode='fan_in')
@@ -133,7 +133,7 @@ class BiLSTM_Att_Clf(nn.Module):
                 seq_embs, padding_indexes : N x seq_len x encoding_dim, N x seq_len
         """
         seq_embs, padding_indexes = self.get_embeddings(seqs) # N x seq_len x embedding_dim, N, seq_len
-        seq_embs = self.encoding_dropout(seq_embs)
+        # seq_embs = self.encoding_dropout(seq_embs)
         seq_encodings, _ = self.encoding_bilstm(seq_embs) # N x seq_len, encoding_dim
         seq_encodings = self.encoding_dropout(seq_encodings)
         

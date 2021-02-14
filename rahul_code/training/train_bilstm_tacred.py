@@ -238,14 +238,15 @@ def main():
 
         if args.exclude_no_relation:
             no_relation_key = ""
-            train_path = "../data/training_data/{}_data_{}.p".format("matched", save_string)
-            train_results = evaluate_next_clf(train_path, clf, TACRED_LABEL_MAP, batch_size=args.eval_batch_size, no_relation_key=no_relation_key)
-            avg_train_ent_f1_score, avg_train_val_f1_score, total_train_class_probs, no_relation_thresholds = train_results
-            print("Train Results")
-            train_tuple = ("%.5f" % avg_train_ent_f1_score, "%.5f" % avg_train_val_f1_score, str(no_relation_thresholds))
-            print("Avg Train Entropy F1 Score: {}, Avg Train Max Value F1 Score: {}, Thresholds: {}".format(*train_tuple))
         else:
             no_relation_key = "no_relation"
+        
+        train_path = "../data/training_data/{}_data_{}.p".format("matched", save_string)
+        train_results = evaluate_next_clf(train_path, clf, TACRED_LABEL_MAP, batch_size=args.eval_batch_size, no_relation_key=no_relation_key)
+        avg_train_ent_f1_score, avg_train_val_f1_score, total_train_class_probs, no_relation_thresholds = train_results
+        print("Train Results")
+        train_tuple = ("%.5f" % avg_train_ent_f1_score, "%.5f" % avg_train_val_f1_score, str(no_relation_thresholds))
+        print("Avg Train Entropy F1 Score: {}, Avg Train Max Value F1 Score: {}, Thresholds: {}".format(*train_tuple))
 
         dev_results = evaluate_next_clf(dev_path, clf, TACRED_LABEL_MAP, batch_size=args.eval_batch_size, no_relation_key=no_relation_key)
         
