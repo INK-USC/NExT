@@ -65,8 +65,7 @@ class Phrase():
             midners = self.ners[st:ed]
             # rename word to phrase
             return {'word':midphrase,'NER':midners,'tokens':self.tokens[st:ed],'position':(st,ed)}
-        else:
-            pdb.set_trace()
+
         return {'word':tokens_to_string(self.tokens),'NER':self.ners,'tokens':self.tokens,'position':(0,len(self.tokens))}
     
     def get_other_posi(self,LoR,XoY):
