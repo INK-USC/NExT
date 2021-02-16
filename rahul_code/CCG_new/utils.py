@@ -263,50 +263,47 @@ def generate_phrase(sentence, nlp):
         Returns
             Phrase : useful wrapper object
     """
-    try:
-        if "SUBJ" in sentence and "OBJ" in sentence:
-            subj_type = re.search(r"SUBJ-[A-Z_'s,]+", sentence).group(0).split("-")[1].strip()
-            subj_type = subj_type.replace("'s", "")
-            subj_type = subj_type.replace(",", "")
-            obj_type = re.search(r"OBJ-[A-Z_'s,]+", sentence).group(0).split("-")[1].strip()
-            obj_type = obj_type.replace("'s", "")
-            obj_type = obj_type.replace(",", "")
-            sentence = re.sub(r"SUBJ-[A-Z_]+", "SUBJ", sentence)
-            sentence = re.sub(r"SUBJ-[A-Z_'s]+", "SUBJ's", sentence)
-            sentence = re.sub(r"SUBJ-[A-Z_]+,", "SUBJ,", sentence)
-            sentence = re.sub(r"OBJ-[A-Z_]+", "OBJ", sentence)
-            sentence = re.sub(r"OBJ-[A-Z_'s]+", "OBJ's ", sentence)
-            sentence = re.sub(r"OBJ-[A-Z_]+,", "OBJ,", sentence)
+    if "SUBJ" in sentence and "OBJ" in sentence:
+        subj_type = re.search(r"SUBJ-[A-Z_'s,]+", sentence).group(0).split("-")[1].strip()
+        subj_type = subj_type.replace("'s", "")
+        subj_type = subj_type.replace(",", "")
+        obj_type = re.search(r"OBJ-[A-Z_'s,]+", sentence).group(0).split("-")[1].strip()
+        obj_type = obj_type.replace("'s", "")
+        obj_type = obj_type.replace(",", "")
+        sentence = re.sub(r"SUBJ-[A-Z_]+", "SUBJ", sentence)
+        sentence = re.sub(r"SUBJ-[A-Z_'s]+", "SUBJ's", sentence)
+        sentence = re.sub(r"SUBJ-[A-Z_]+,", "SUBJ,", sentence)
+        sentence = re.sub(r"OBJ-[A-Z_]+", "OBJ", sentence)
+        sentence = re.sub(r"OBJ-[A-Z_'s]+", "OBJ's ", sentence)
+        sentence = re.sub(r"OBJ-[A-Z_]+,", "OBJ,", sentence)
 
-        doc = nlp(sentence)
-        ners = [token.ent_type_ if token.text not in ["SUBJ", "OBJ"] else "" for token in doc]
-        tokens = [token.text for token in doc]
-        subj_posi = None
-        obj_posi = None
-        indices_to_pop = []
-        for i, token in enumerate(tokens):
-            if token == "SUBJ":
-                if subj_posi:
-                    indices_to_pop.append(i)
-                else:
-                    subj_posi = i
-                    ners[i] = subj_type
-            elif token == "OBJ":
-                if obj_posi:
-                    indices_to_pop.append(i)
-                else:
-                    obj_posi = i
-                    ners[i] = obj_type
+    doc = nlp(sentence)
+    ners = [token.ent_type_ if token.text not in ["SUBJ", "OBJ"] else "" for token in doc]
+    tokens = [token.text for token in doc]
+    subj_posi = None
+    obj_posi = None
+    indices_to_pop = []
+    for i, token in enumerate(tokens):
+        if token == "SUBJ":
+            if subj_posi:
+                indices_to_pop.append(i)
+            else:
+                subj_posi = i
+                ners[i] = subj_type
+        elif token == "OBJ":
+            if obj_posi:
+                indices_to_pop.append(i)
+            else:
+                obj_posi = i
+                ners[i] = obj_type
 
-        if len(indices_to_pop):
-            indices_to_pop.reverse()
-            for index in indices_to_pop:
-                ners.pop(index)
-                tokens.pop(index)
-        
-        return util_classes.Phrase(tokens, ners, subj_posi, obj_posi)
-    except:
-        pdb.set_trace()
+    if len(indices_to_pop):
+        indices_to_pop.reverse()
+        for index in indices_to_pop:
+            ners.pop(index)
+            tokens.pop(index)
+    
+    return util_classes.Phrase(tokens, ners, subj_posi, obj_posi)
 
 def create_semantic_repr(parse_tree):
     """
