@@ -40,14 +40,6 @@ def main():
                         type=str,
                         default="../data/tacred_explanations.json",
                         help="Path to explanation data.")
-    parser.add_argument("--find_module_path",
-                        type=str,
-                        default="../data/saved_models/Find-Module-pt_official.p",
-                        help="Path to pretrained find module")
-    parser.add_argument("--l_sim_data_path",
-                        type=str,
-                        default="../data/pre_train_data/sim_data_glove.840B.300d_-1_0.6.p",
-                        help="Path to l_sim data for Find module")
     parser.add_argument("--vocab_path",
                         type=str,
                         default="../data/pre_train_data/vocab_glove.840B.300d_-1_0.6.p",
@@ -80,14 +72,6 @@ def main():
                         type=int,
                         default=7698,
                         help="random seed for initialization")
-    parser.add_argument('--gamma',
-                        type=float,
-                        default=0.7,
-                        help="weight of soft_matching_loss")
-    parser.add_argument('--beta',
-                        type=float,
-                        default=0.5,
-                        help="weight of sim_loss")
     parser.add_argument('--emb_dim',
                         type=int,
                         default=300,
@@ -113,10 +97,7 @@ def main():
     parser.add_argument('--use_adagrad',
                         action='store_true',
                         help="use adagrad optimizer")
-    parser.add_argument('--mlp_layer',
-                        type=int,
-                        default=3)
-    parser.add_argument('--exclude_no_relation',
+    parser.add_argument('--no_thresholds',
                         action='store_true')
     
     args = parser.parse_args()
@@ -154,7 +135,7 @@ def main():
         device = torch.device("cpu")
 
     clf = BiLSTM_Att_Clf.BiLSTM_Att_Clf(vocab.vectors, pad_idx, args.emb_dim, args.hidden_dim,
-                                        torch.cuda.is_available(), number_of_classes, mlp_layer=args.mlp_layer)
+                                        torch.cuda.is_available(), number_of_classes)
     
     del vocab
 
@@ -235,7 +216,7 @@ def main():
         loss_tuples = ("%.5f" % train_avg_loss, "%.5f" % train_avg_strict_loss, "%.5f" % train_avg_soft_loss, "%.5f" % train_avg_sim_loss)
         print("Avg Train Total Loss: {}, Avg Train Strict Loss: {}, Avg Train Soft Loss: {}, Avg Train Sim Loss: {}".format(*loss_tuples))
 
-        if args.exclude_no_relation:
+        if args.no_thresholds:
             no_relation_key = ""
         else:
             no_relation_key = "no_relation"
