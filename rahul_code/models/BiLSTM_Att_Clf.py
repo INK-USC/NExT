@@ -30,7 +30,6 @@ class BiLSTM_Att_Clf(nn.Module):
         self.hidden_dim = hidden_dim
         self.encoding_dim = 2*hidden_dim
         self.number_of_classes = number_of_classes
-        self.mlp_layer = mlp_layer
 
         if add_subj_obj:
             subj_vector = torch.randn(1, emb_dim)

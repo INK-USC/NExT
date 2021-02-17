@@ -277,8 +277,6 @@ def _apply_no_relation_label(values, preds, label_map, no_relation_key, threshol
 def evaluate_next_clf(data_path, model, label_map, no_relation_thresholds=None,
                       batch_size=128, no_relation_key="no_relation"):
 
-    label_space = [i for i in range(0,41)]
-
     with open(data_path, "rb") as f:
         eval_dataset = pickle.load(f)
     
