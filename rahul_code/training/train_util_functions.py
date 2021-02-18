@@ -116,6 +116,9 @@ def create_parser(parser_training_data, explanation_path, dataset="tacred"):
     parser_trainer.train()
     parser = parser_trainer.get_parser()
 
+    with open("../data/training_data/parser.p", "wb") as f:
+        dill.dump(parser, f)
+
     return parser
 
 def match_training_data(labeling_functions, train):
