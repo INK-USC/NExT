@@ -46,7 +46,7 @@ RAW_GRAMMAR =''':- S,NP,N,PP
         $MoreThan => PP/N {\\x.'@MoreThan1'(y,x)} #same as above
 
         #$In => S\\NP/NP {None} 
-        #$In => PP/NP {\\x.'@In0'(x)} 
+        $In => PP/NP {\\x.'@In0'(x)} 
         $Separator => var\\.,var/.,var {\\x y.'@And'(x,y)} #connection between two words
         #$Processive => NP/N\\N {None}
         #$Count => N {None}
@@ -73,8 +73,8 @@ RAW_GRAMMAR =''':- S,NP,N,PP
         #$Within => (NP\\NP)/NP {None}
         $Within => PP/PP/N {\\x y.'@AtMost'(y,x)} #Does Within has other meaning.
         $Sentence => NP {'Sentence'}
-        $Contains => S\\NP/NP {\\x y. '@In0'(y, x)} #y contains x
-        $In => S\\NP/NP {\\x y. '@In0'(x, y)} # y is in x
+        #$Contains => S\\NP/NP {\\x y. '@In0'(y, x)} #y contains x
+        #$In => S\\NP/NP {\\x y. '@In0'(x, y)} # y is in x
         $Between => (S/S)/NP {\\x y.'@between'(x,y)}
         $Between => S/NP {\\x.'@between'(x)}
         $Between => PP/NP {\\x.'@between'(x)}
@@ -387,7 +387,7 @@ STRICT_MATCHING_OPS = {
     "@Word"       : lambda x: x,
     "@Is"         : lambda ws,p: lambda c: gram_f.IsFunc(ws,p,c),
     "@between"    : lambda a: lambda w,option=None: lambda c: gram_f.at_between(w,c,option,a),
-    "@In0"        : lambda arg,w: lambda c: gram_f.at_In0(arg,w,c),
+    "@In0"        : lambda arg: lambda w: lambda c: gram_f.at_In0(arg,w,c),
     "@And"        : lambda x,y: gram_f.merge(x,y),
     "@Num"        : lambda x,y: {'attr':y,'num':int(x)},
     "@LessThan"   : lambda funcx,nouny: lambda w: lambda c: gram_f.at_lessthan(funcx,nouny,w,c),
@@ -436,8 +436,8 @@ SOFT_MATCHING_OPS = {
     "@AtMost1"   : lambda nounynum: lambda x: lambda label_mat,keyword_dict,mask_mat: lambda c: soft_gram_f.at_atmost_soft(x[1], {'attr': x[0], "num": int(nounynum)}, 'There', label_mat,keyword_dict,mask_mat,c),
     "@AtLeast1"  : lambda nounynum: lambda x: lambda label_mat,keyword_dict,mask_mat: lambda c: soft_gram_f.at_atleast_soft(x[1], {'attr': x[0], "num": int(nounynum)}, 'There',label_mat,keyword_dict,mask_mat,c),
     "@MoreThan1" : lambda nounynum: lambda x: lambda label_mat,keyword_dict,mask_mat: lambda c: soft_gram_f.at_morethan_soft(x[1], {'attr': x[0], "num": int(nounynum)}, 'There',label_mat,keyword_dict,mask_mat,c),
-    
-    "@In0"       : lambda arg, w: lambda label_mat,keyword_dict,mask_mat: lambda c: soft_gram_f.at_In0_soft(arg, w, label_mat,keyword_dict,mask_mat,c),
+
+    "@In0"       : lambda arg: lambda w: lambda label_mat,keyword_dict,mask_mat: lambda c: soft_gram_f.at_In0_soft(arg, w, label_mat,keyword_dict,mask_mat,c),
 
     "@By"        : lambda x,f,z: lambda label_mat,keyword_dict,mask_mat: lambda c: f(x, {'attr': z['attr'], 'range': z['num'], 'numAppear': 1, 'cmp': 'nlt','onlyCount': False})(label_mat,keyword_dict,mask_mat)(c),
 
