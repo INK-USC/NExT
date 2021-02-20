@@ -28,7 +28,7 @@ class TrainedCCGParser():
     def __init__(self, low_end_filter_count=0, high_end_filter_pct=0.5):
         self.loaded_data = None
         self.grammar = None
-        self.standard_ccg_parser = None
+        # self.standard_ccg_parser = None
         self.semantic_reps = None
         self.labeling_functions = None
         self.soft_labeling_functions = None
@@ -48,6 +48,7 @@ class TrainedCCGParser():
             Arguments:
                 init_grammar (str) : initial grammar to use
         """
+        # pdb.set_trace()
         quote_words = {}
         for i, triple in enumerate(self.loaded_data):
             explanation = triple.raw_explanation
@@ -62,9 +63,9 @@ class TrainedCCGParser():
         
         self.grammar = utils.add_rules_to_grammar(quote_words, init_grammar)
 
-    def set_standard_parser(self, rule_set=chart.DefaultRuleSet):
-        lex = lexicon.fromstring(self.grammar, True)
-        self.standard_ccg_parser = chart.CCGChartParser(lex, rule_set)
+    # def set_standard_parser(self, rule_set=chart.DefaultRuleSet):
+        # lex = lexicon.fromstring(self.grammar, True)
+        # self.standard_ccg_parser = chart.CCGChartParser(lex, rule_set)
         
     def tokenize_explanations(self):
         """
@@ -114,44 +115,43 @@ class TrainedCCGParser():
         """
         cut_off = int(len(self.loaded_data) * 0.2)
         for i, datapoint in enumerate(self.loaded_data):
-                if len(datapoint.raw_explanation):
-                    tokenizations = self.loaded_data[i].tokenized_explanations
-                    logic_forms = []
-                    for tokenization in tokenizations:
-                        try:
-                            parses = list(self.standard_ccg_parser.parse(tokenization))
-                            logic_forms += parses
-
-                        except:
-                            continue
+            if len(datapoint.raw_explanation):
+                tokenizations = self.loaded_data[i].tokenized_explanations
+                logic_forms = []
+                for tokenization in tokenizations:
+                    try:
+                        parses = list(utils.parse_tokens(tokenization, self.grammar))
+                        logic_forms += parses
+                    except:
+                        continue
+                semantic_counts = {}
+                if len(logic_forms):
                     semantic_counts = {}
-                    if len(logic_forms):
-                        semantic_counts = {}
-                        for tree in logic_forms:
-                            semantic_repr = utils.create_semantic_repr(tree)
-                            if semantic_repr:
-                                if semantic_repr in semantic_counts:
-                                    semantic_counts[semantic_repr] += 1
-                                else:
-                                    semantic_counts[semantic_repr] = 1
-                    self.loaded_data[i].semantic_counts = semantic_counts
+                    for parse in logic_forms:
+                        semantic_repr = utils.create_semantic_repr_ziqi(parse)
+                        if semantic_repr:
+                            if semantic_repr in semantic_counts:
+                                semantic_counts[semantic_repr] += 1
+                            else:
+                                semantic_counts[semantic_repr] = 1
+                self.loaded_data[i].semantic_counts = semantic_counts
 
-                    labeling_functions = {}
-                    if len(semantic_counts):
-                        for key in semantic_counts:
-                            labeling_function = utils.create_labeling_function(key)
-                            if labeling_function:
-                                try:
-                                    if labeling_function(datapoint.sentence): # filtering out labeling functions that don't even apply on their own datapoint
-                                        labeling_functions[key] = labeling_function
-                                except:
-                                    continue                                       
+                labeling_functions = {}
+                if len(semantic_counts):
+                    for key in semantic_counts:
+                        labeling_function = utils.create_labeling_function(key)
+                        if labeling_function:
+                            try:
+                                if labeling_function(datapoint.sentence): # filtering out labeling functions that don't even apply on their own datapoint
+                                    labeling_functions[key] = labeling_function
+                            except:
+                                continue                                    
 
-                    self.loaded_data[i].labeling_functions = labeling_functions
+                self.loaded_data[i].labeling_functions = labeling_functions
 
-                if verbose:
-                    if i > 0 and i % cut_off == 0:
-                        print("Parser: 20% more explanations parsed")
+            if verbose:
+                if i > 0 and i % cut_off == 0:
+                    print("Parser: 20% more explanations parsed")
         
     def matrix_filter(self, unlabeled_data):
         """
@@ -309,9 +309,9 @@ class CCGParserTrainer():
         self.parser.tokenize_explanations()
         if verbose:
             print("Parser: Tokenized Explanations")
-        self.parser.set_standard_parser()
-        if verbose:
-            print("Parser: Set Up CCG Parser")
+        # self.parser.set_standard_parser()
+        # if verbose:
+        #     print("Parser: Set Up CCG Parser")
         self.parser.build_labeling_rules()
         if verbose:
             print("Parser: Built Labeling Rules")

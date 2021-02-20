@@ -194,7 +194,7 @@
     {
         "label": "per:title",
         "sent": "How OBJ-TITLE SUBJ-PERSON is going to keep things interesting as Ned revives/kills dead people each week and continues to be unable to touch Chuck will be one of the TV season 's true wonders .",
-        "explanation": "OBJ-TITLE is right before SUBJ-PERSON",
+        "explanation": "OBJ is right before SUBJ",
         "pattern": "OBJ-TITLE SUBJ-PERSON"
     },
     {
@@ -732,7 +732,7 @@
         "pat": [
             "founded SUBJ-ORGANIZATION in OBJ-DATE"
         ],
-        "explanation": "the word 'founded' is right before <S> and the word 'in' is right after <S> and the word 'in' is right before Y",
+        "explanation": "the word 'founded' is right before SUBJ and the word 'in' is right after SUBJ and the word 'in' is right before Y",
         "sent": "Wilhelmina Cole Holladay , an art collector , founded SUBJ-ORGANIZATION in OBJ-DATE"
     },
     {
@@ -788,7 +788,7 @@
         "pat": [
             "SUBJ-ORGANIZATION members are OBJ-ORGANIZATION"
         ],
-        "explanation": "the word 'members are' is right after <S>",
+        "explanation": "the word 'members are' is right after SUBJ",
         "sent": "Besides Pakistan , Iran and Turkey , SUBJ-ORGANIZATION members are Afghanistan , Azerbaijan , Kazakhstan , OBJ-ORGANIZATION , Tajikistan , Turkmenistan and Uzbekistan"
     },
     {
@@ -860,7 +860,7 @@
         "pat": [
             "SUBJ-PERSON living in OBJ-CITY"
         ],
-        "explanation": "The words 'living in' occur right before OBJ-CITY",
+        "explanation": "The words 'living in' occur right before OBJ",
         "sent": "The high court is expected to set a date next week to rule on whether Madonna can officially adopt SUBJ-PERSON , who has been living in OBJ-CITY with the star and her filmmaker husband Guy Ritchie under an interim custody order"
     },
     {
@@ -868,7 +868,7 @@
         "pat": [
             "SUBJ-ORGANIZATION 's headquarters in OBJ-CITY"
         ],
-        "explanation": "\"'s headquarters in\" is written right before OBJ-CITY",
+        "explanation": "\"'s headquarters in\" is written right before OBJ",
         "sent": "The new company will keep SUBJ-ORGANIZATION 's headquarters in OBJ-CITY , where 1,300 people work in research and administration"
     },
     {
@@ -948,7 +948,7 @@
         "pat": [
             "set up SUBJ-ORGANIZATION OBJ-DATE"
         ],
-        "explanation": "the word 'set up' occurs within 4 words before <S> and the word 'in' is right before Y",
+        "explanation": "the word 'set up' occurs within 4 words before SUBJ and the word 'in' is right before Y",
         "sent": "Congress set up the SUBJ-ORGANIZATION in OBJ-DATE amid a wave of post-Watergate reforms intended to end corruption in the political process"
     },
     {
@@ -956,7 +956,7 @@
         "pat": [
             "SUBJ-PERSON died from OBJ-CAUSE_OF_DEATH"
         ],
-        "explanation": "The word 'died from' right before <O>",
+        "explanation": "The word 'died from' right before OBJ",
         "sent": "The renowned mountain photographer , SUBJ-PERSON and cartographer died from OBJ-CAUSE_OF_DEATH Wednesday"
     },
     {
@@ -1020,7 +1020,7 @@
         "pat": [
             "SUBJ-PERSON who currently lives in OBJ-STATE_OR_PROVINCE"
         ],
-        "explanation": "the words 'who currently lives in' is right before <O>",
+        "explanation": "the words 'who currently lives in' is right before OBJ",
         "sent": "SUBJ-PERSON , who currently lives in OBJ-STATE_OR_PROVINCE , just north of London , claims he is constantly harrassed by photographers as he tries to go about his daily business"
     },
     {
@@ -1068,7 +1068,7 @@
         "pat": [
             "set up SUBJ-ORGANIZATION OBJ-DATE"
         ],
-        "explanation": "the word 'set up' occurs within 4 words before <S> and the word 'in' is right before Y",
+        "explanation": "the word 'set up' occurs within 4 words before SUBJ and the word 'in' is right before Y",
         "sent": "Congress set up the SUBJ-ORGANIZATION in OBJ-DATE amid a wave of post-Watergate reforms intended to end corruption in the political process"
     },
     {
@@ -1076,7 +1076,7 @@
         "pat": [
             "OBJ-NUMBER SUBJ-PERSON"
         ],
-        "explanation": "The words \"at the age of\" appear right before OBJ-NUMBER",
+        "explanation": "The words \"at the age of\" appear right before OBJ",
         "sent": "At the age of OBJ-NUMBER , SUBJ-PERSON vanished into America 's shadow prison system in the war on terror"
     },
     {

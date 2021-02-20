@@ -1,5 +1,7 @@
 import spacy
 import sys
+import pickle
+import json
 sys.path.append("../")
 sys.path.append("../CCG_new/")
 from CCG_new import utils
@@ -181,3 +183,17 @@ def test_generate_phrase():
     assert phrase.ners == phrase_ners
     assert phrase.subj_posi == phrase_subj_posi
     assert phrase.obj_posi == phrase_obj_posi
+
+# def test_create_semantic_repr_re():
+#     with open("data/tacred_explanations.json") as f:
+#         tacred_explanations = json.load(f)
+    
+#     for 
+
+
+def test_create_labeling_function_re():
+    with open("data/ziqi_semantic_reps.p", "rb") as f:
+        ziqi_semantic_reps = pickle.load(f)
+    
+    for rep in ziqi_semantic_reps:
+        assert utils.create_labeling_function(rep) != False

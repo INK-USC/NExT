@@ -47,6 +47,7 @@ RAW_GRAMMAR =''':- S,NP,N,PP
 
         #$In => S\\NP/NP {None} 
         $In => PP/NP {\\x.'@In0'(x)} 
+        $Contains => S\\NP/NP {None} #The sentence contains two words
         $Separator => var\\.,var/.,var {\\x y.'@And'(x,y)} #connection between two words
         #$Processive => NP/N\\N {None}
         #$Count => N {None}

@@ -3,6 +3,8 @@ import string
 from CCG_new import constants
 from CCG_new import util_classes
 import pdb
+import copy
+from nltk.ccg import chart, lexicon
 
 def _find_quoted_phrases(explanation):
     """
@@ -36,7 +38,6 @@ def segment_explanation(explanation):
     """
         Segments an explanation into portions that have a quoted phrase and those that don't
         Prepends the quoted word segments with an asterisk to indicate the existences of a quoted phrase
-
         Arguments:
             explanation (str) : raw explanation text
         
@@ -68,7 +69,6 @@ def clean_text(text, lower=True, collapse_punc=True, commas=True, switch_amp=Tru
             5. Removes unnecessary whitespace within text 
         
         Used for Cleaning Explanations.
-
         Arguments:
             text           (str) : text to be cleaned
             lower         (bool) : lowercase text or not
@@ -102,7 +102,6 @@ def clean_text(text, lower=True, collapse_punc=True, commas=True, switch_amp=Tru
 def clean_explanation(explanation):
     """
         Function that cleans an explanation text, but also makes sure to leave text within quotes uncleaned
-
         Arguments:
             explanation (str) : explanation to be cleaned
         
@@ -130,7 +129,6 @@ def convert_chunk_to_terminal(chunk):
         3. If its a number, we put quotes around it
         4. If its a numeric string we convert its base 10 form and put quotes around it
         5. Else this chunk will not be matched to a terminal
-
         Arguments:
             chunk (str) : chunk that needs to be converted
         
@@ -209,7 +207,6 @@ def prepare_token_for_rule_addition(token, reverse=False):
         Certain tokens spawn new rules in the CCG grammar, before the rule can be created though
         we must normalize the token. We do this to ensure the parsing of the grammar by the CCGChartParser.
         We also reverse the normalization when needed, but collapse certain patterns to a single comma.
-
         Arguments:
             token    (str) : token to be normalized
             reverse (bool) : reverse the normalization
@@ -235,7 +232,6 @@ def add_rules_to_grammar(tokens, grammar_string):
     """
         Certain tokens require rules to be addeed to a base CCG grammar, depending on the token
         this function adds those rules to the grammar.
-
         Arguments:
             tokens         (arr) : tokens that require new rules to be added to the grammar
             grammar_string (str) : string representation of the base grammar to add to
@@ -245,17 +241,16 @@ def add_rules_to_grammar(tokens, grammar_string):
         raw_token = token[1:len(token)-1]
         token = prepare_token_for_rule_addition(token)
         if raw_token.isdigit():
-            grammar = grammar + "\t" + token + " => NP/NP {\\x.'@Num'(" + token + ",x)}" + "\n\t" + token + " => N/N {\\x.'@Num'(" + token + ",x)}"+"\n"
-            grammar = grammar + "\t" + token + " => NP {" + token + "}" + "\n\t\t" + token + " => N {" + token + "}"+"\n"
-            grammar = grammar + "\t" + token + " => PP/PP/NP/NP {\\x y F.'@WordCount'('@Num'(" + token + ",x),y,F)}" + "\n\t" + token + " => PP/PP/N/N {\\x y F.'@WordCount'('@Num'(" + token + ",x),y,F)}"+"\n"
+            grammar = grammar + "\n\t\t" + token + " => NP/NP {\\x.'@Num'(" + token + ",x)}" + "\n\t\t" + token + " => N/N {\\x.'@Num'(" + token + ",x)}"+"\n"
+            grammar = grammar + "\n\t\t" + token + " => NP {" + token + "}" + "\n\t\t" + token + " => N {" + token + "}"+"\n"
+            grammar = grammar + "\n\t\t" + token + " => PP/PP/NP/NP {\\x y F.'@WordCount'('@Num'(" + token + ",x),y,F)}" + "\n\t\t" + token + " => PP/PP/N/N {\\x y F.'@WordCount'('@Num'(" + token + ",x),y,F)}"+"\n"
         else:
-            grammar = grammar + "\t" + token + " => NP {"+token+"}"+"\n\t"+token+" => N {"+token+"}"+"\n"
-    return grammar.strip()
+            grammar = grammar + "\n\t\t" + token + " => NP {"+token+"}"+"\n\t\t"+token+" => N {"+token+"}"
+    return grammar
 
 def generate_phrase(sentence, nlp):
     """
         Generate a useful wrapper object for each sentence in the data
-
         Arguments:
             sentence    (str) : sentence to generate wrapper for
             nlp (spaCy model) : pre-loaded spaCy model to use for NER detection
@@ -305,38 +300,66 @@ def generate_phrase(sentence, nlp):
     
     return util_classes.Phrase(tokens, ners, subj_posi, obj_posi)
 
-def create_semantic_repr(parse_tree):
-    """
-        Given a valid parse tree, we extract the semtantic string representation of the tree.
-        In order to execute the functions that make up the semantic string, we create a hierarchical
-        representation of the string, so that functions that rely on the return value of functions
-        lower down the in the representation can be evaluated.
+def parse_tokens(one_sent_tokenize, raw_lexicon):
+    try:
+        beam_lexicon = copy.deepcopy(raw_lexicon)
+        CYK_form = [[[token] for token in one_sent_tokenize]]
+        CYK_sem = [[]]
+        for layer in range(1,len(one_sent_tokenize)):
+            layer_form = []
+            layer_sem = []
+            lex = lexicon.fromstring(beam_lexicon, True)
+            parser = chart.CCGChartParser(lex, chart.DefaultRuleSet)
+            for col in range(0,len(one_sent_tokenize)-layer):
+                form = []
+                sem_temp = []
+                word_index = 0
+                st = col+0
+                ed = st+layer
+                for splt in range(st,ed):
+                    words_L = CYK_form[splt-st][st]
+                    words_R = CYK_form[ed-splt-1][splt+1]
+                    for word_0 in words_L:
+                        for word_1 in words_R:
+                            try:
+                                for parse in parser.parse([word_0, word_1]):
+                                    (token, op) = parse.label()
+                                    categ = token.categ()
+                                    sem = token.semantics()
+                                    word_name = '$Layer{}_Horizon{}_{}'.format(str(layer), str(col),str(word_index))
+                                    word_index+=1
+                                    entry = "\n\t\t"+word_name+' => '+str(categ)+" {"+str(sem)+"}"
+                                    if str(sem)+'_'+str(categ) not in sem_temp:
+                                        form.append((parse,word_name,entry,str(sem)))
+                                        sem_temp.append(str(sem)+'_'+str(categ))
+                            except:
+                                pass
+                # form = sorted(form,key=lambda s:np.dot(self.get_feature(s[0]).transpose(),self.theta)[0,0],reverse=True)
+                # form = form[:min(len(form),beam_width)]
+                add_form = []
+                for elem in form:
+                    parse, word_name, entry,sem_ = elem
+                    add_form.append(word_name)
+                    beam_lexicon = beam_lexicon+entry
+                    layer_sem.append(sem_)
+                layer_form.append(add_form)
+            CYK_form.append(layer_form)
+            CYK_sem.append(layer_sem)
+        return CYK_sem[-1]
+    except:
+        return []
 
-        In doing this, we loose the original lexical heirachy of the parse tree.
-        Differs from this approach https://homes.cs.washington.edu/~lsz/papers/zc-uai05.pdf
-        Meaning that we can't create features based on lexical structure, but only semantic structure
-
-        If the semantic string representation of the tree makes sense when considering the ordering
-        of the functions making up the string, then we output the hierarchical tuple, else we return
-        false. False here indicates that while a valid parse tree was attainable, the semantics of the
-        parse do not make sense.
-
-        Arguments:
-            parse_tree (nltk.tree.Tree (result of CCGChartParser.parse())) : tree to convert to semantic
-                                                                             representation
-        
-        Returns:
-            tuple | false : if valid semantically, we output a tuple describing the semantics, else false
-    """
-    full_semantics = str(parse_tree.label()[0].semantics())
+def create_semantic_repr_ziqi(semantic_rep):
     # Possible clause delimiter
-    clauses = re.split(',|(\\()',full_semantics)
+    clauses = re.split(',|(\\()',semantic_rep)
     delete_index = []
     for i in range(len(clauses)-1, -1, -1):
         if clauses[i] == None:
             delete_index.append(i)
     for i in delete_index:
         del clauses[i]
+    
+    # pdb.set_trace()
     
     # Switch poisition of ( and Word before it
     switched_semantics = []
@@ -345,6 +368,8 @@ def create_semantic_repr(parse_tree):
             switched_semantics.insert(-1,'(')
         else:
             switched_semantics.append(token)
+    
+    # pdb.set_trace()
     # Converting semantic string into a multi-level tuple, ex: (item, tuple) would be a two level tuple
     # This representation allows for the conversion from semantic representation to labeling function
     hierarchical_semantics = ""
@@ -374,6 +399,86 @@ def create_semantic_repr(parse_tree):
     # if the ordering of the semantics in this semantic representation is acceptable per the functions
     # the semantics map to, then we will be able to create the desired multi-label tuple
     # else we return False
+    try:
+        hierarchical_tuple = ('.root', eval(hierarchical_semantics))
+#     # print("cool")
+#     # print(hierarchical_tuple)
+        return hierarchical_tuple
+    except:
+        return False
+
+def create_semantic_repr(parse_tree):
+    """
+        Given a valid parse tree, we extract the semtantic string representation of the tree.
+        In order to execute the functions that make up the semantic string, we create a hierarchical
+        representation of the string, so that functions that rely on the return value of functions
+        lower down the in the representation can be evaluated.
+        In doing this, we loose the original lexical heirachy of the parse tree.
+        Differs from this approach https://homes.cs.washington.edu/~lsz/papers/zc-uai05.pdf
+        Meaning that we can't create features based on lexical structure, but only semantic structure
+        If the semantic string representation of the tree makes sense when considering the ordering
+        of the functions making up the string, then we output the hierarchical tuple, else we return
+        false. False here indicates that while a valid parse tree was attainable, the semantics of the
+        parse do not make sense.
+        Arguments:
+            parse_tree (nltk.tree.Tree (result of CCGChartParser.parse())) : tree to convert to semantic
+                                                                             representation
+        
+        Returns:
+            tuple | false : if valid semantically, we output a tuple describing the semantics, else false
+    """
+    # pdb.set_trace()
+    full_semantics = str(parse_tree.label()[0].semantics())
+    # Possible clause delimiter
+    clauses = re.split(',|(\\()',full_semantics)
+    delete_index = []
+    for i in range(len(clauses)-1, -1, -1):
+        if clauses[i] == None:
+            delete_index.append(i)
+    for i in delete_index:
+        del clauses[i]
+    
+    # pdb.set_trace()
+    
+    # Switch poisition of ( and Word before it
+    switched_semantics = []
+    for i, token in enumerate(clauses):
+        if token=='(':
+            switched_semantics.insert(-1,'(')
+        else:
+            switched_semantics.append(token)
+    
+    # pdb.set_trace()
+    # Converting semantic string into a multi-level tuple, ex: (item, tuple) would be a two level tuple
+    # This representation allows for the conversion from semantic representation to labeling function
+    hierarchical_semantics = ""
+    for i, clause in enumerate(switched_semantics):
+        prepped_clause = clause
+        if prepped_clause.startswith("\""):
+            prepped_clause = prepare_token_for_rule_addition(prepped_clause, reverse=True)
+            if prepped_clause.endswith(")"):
+                posi = len(prepped_clause)-1
+                while prepped_clause[posi]==")":
+                    posi-=1
+                assert prepped_clause[posi]=="\'"
+            else:
+                posi = len(prepped_clause)-1
+                assert prepped_clause[posi] == "\'"
+            # print(prepped_clause)
+            prepped_clause = prepped_clause[0] + \
+                             prepped_clause[1:posi].replace('\'','\\\'') + \
+                             prepped_clause[posi:]
+            # print(prepped_clause[1:posi])
+            # print(prepped_clause)
+
+        if switched_semantics[i-1] != "(" and len(hierarchical_semantics):
+            hierarchical_semantics += ","
+
+        hierarchical_semantics += prepped_clause
+    # pdb.set_trace()
+    # if the ordering of the semantics in this semantic representation is acceptable per the functions
+    # the semantics map to, then we will be able to create the desired multi-label tuple
+    # else we return False
     # print(hierarchical_semantics)
     try:
         hierarchical_tuple = ('.root', eval(hierarchical_semantics))
@@ -388,7 +493,6 @@ def create_labeling_function(semantic_repr, level=0):
         Creates a labeling function (lambda function) from a hierarchical tuple representation
         of the semantics of a parse tree. The labeling function takes in a Phrase object and then
         evaluates whether the labeling function applies to this Phrase object.
-
         Arguments:
             semantic_repr (tuple) : hierarchical tuple representation
         
@@ -421,7 +525,6 @@ def create_soft_labeling_function(semantic_repr, level=0):
         Creates a labeling function (lambda function) from a hierarchical tuple representation
         of the semantics of a parse tree. The labeling function takes in a Phrase object and then
         evaluates whether the labeling function applies to this Phrase object.
-
         Arguments:
             semantic_repr (tuple) : hierarchical tuple representation
         
