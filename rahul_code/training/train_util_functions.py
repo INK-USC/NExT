@@ -125,6 +125,9 @@ def match_training_data(labeling_functions, train):
 
     phrases = [generate_phrase(entry, nlp) for entry in train]
 
+    with open("train_phrases.p", "wb") as f:
+        pickle.dump(phrases, f)
+
     matched_data_tuples = []
     unlabeled_data_phrases = []
 
@@ -209,12 +212,12 @@ def build_datasets_from_splits(train_path, dev_path, test_path, vocab_path, expl
         obj_idx = subj_idx + 1
         special_words = {"subj" : subj_idx, "obj" : obj_idx}
 
-    parser_training_data = random.sample(train, min(PARSER_TRAIN_SAMPLE, len(train)))
+    # parser_training_data = random.sample(train, min(PARSER_TRAIN_SAMPLE, len(train)))
     
-    parser = create_parser(parser_training_data, explanation_path, dataset)
+    # parser = create_parser(parser_training_data, explanation_path, dataset)
 
-    # with open("parser.p", "rb") as f:
-    #     parser = dill.load(f)
+    with open("../data/training_data/parser.p", "rb") as f:
+        parser = dill.load(f)
     
     strict_labeling_functions = parser.labeling_functions
     
