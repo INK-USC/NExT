@@ -25,7 +25,7 @@ class TrainedCCGParser():
         Attributes:
             
     """
-    def __init__(self, low_end_filter_count=0, high_end_filter_pct=0.5):
+    def __init__(self, low_end_filter_count=3, high_end_filter_pct=0.2):
         self.loaded_data = None
         self.grammar = None
         # self.standard_ccg_parser = None
@@ -310,8 +310,11 @@ class CCGParserTrainer():
         for entry in data:
             phrase_for_text = utils.generate_phrase(entry, nlp)
             self.unlabeled_data.append(phrase_for_text)
+        
+        with open("training_phrases.p", "wb") as f:
+            pickle.dump(self.unlabeled_data, f)
 
-    def train(self, matrix_filter=False, build_soft_functions=True, verbose=True):
+    def train(self, matrix_filter=True, build_soft_functions=True, verbose=True):
         self.load_data(self.params["explanation_file"])
         if verbose:
             print("Parser: Loaded explanation data")
@@ -338,7 +341,7 @@ class CCGParserTrainer():
         if build_soft_functions:
             self.parser.build_soft_labeling_functions()
             if verbose:
-                print("Parser: Built out soft labeling functions")
+                print("Parser: Built soft labeling functions")
     
     def get_parser(self):
         return self.parser

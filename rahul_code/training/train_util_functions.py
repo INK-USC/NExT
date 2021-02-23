@@ -107,11 +107,11 @@ def set_tacred_ner_label_space():
     set_ner_label_space(temp)
     set_ner_label_space(TACRED_NERS)
 
-def create_parser(explanation_path, dataset="tacred"):
+def create_parser(parser_training_data, explanation_path, dataset="tacred"):
     parser_trainer = None
     
     if dataset == "tacred":
-        parser_trainer = CCGParserTrainer("re", explanation_path, "")
+        parser_trainer = CCGParserTrainer("re", explanation_path, "", parser_training_data)
     
     parser_trainer.train()
     parser = parser_trainer.get_parser()
@@ -123,10 +123,13 @@ def create_parser(explanation_path, dataset="tacred"):
 
 def match_training_data(labeling_functions, train):
 
-    phrases = [generate_phrase(entry, nlp) for entry in train]
+    # phrases = [generate_phrase(entry, nlp) for entry in train]
 
-    with open("train_phrases.p", "wb") as f:
-        pickle.dump(phrases, f)
+    # with open("train_phrases.p", "wb") as f:
+    #     pickle.dump(phrases, f)
+
+    with open("train_phrases.p", "rb") as f:
+        phrases = pickle.load(f)
 
     matched_data_tuples = []
     unlabeled_data_phrases = []
@@ -212,9 +215,9 @@ def build_datasets_from_splits(train_path, dev_path, test_path, vocab_path, expl
         obj_idx = subj_idx + 1
         special_words = {"subj" : subj_idx, "obj" : obj_idx}
 
-    # parser_training_data = random.sample(train, min(PARSER_TRAIN_SAMPLE, len(train)))
+    parser_training_data = random.sample(train, min(PARSER_TRAIN_SAMPLE, len(train)))
     
-    parser = create_parser(explanation_path, dataset)
+    parser = create_parser(parser_training_data, explanation_path, dataset)
 
     # with open("../data/training_data/parser.p", "rb") as f:
     #     parser = dill.load(f)
