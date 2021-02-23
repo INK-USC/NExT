@@ -26,14 +26,14 @@ class TrainedCCGParser():
         Attributes:
             
     """
-    def __init__(self, low_end_filter_count=10, high_end_filter_pct=0.2):
+    def __init__(self, low_end_filter_count=3, high_end_filter_pct=0.2):
         self.loaded_data = None
         self.grammar = None
-        # self.standard_ccg_parser = None
         self.semantic_reps = None
         self.labeling_functions = None
         self.soft_labeling_functions = None
         self.filtered_raw_explanations = None
+        self.ner_types = None
         self.low_end_filter_count = low_end_filter_count
         self.high_end_filter_pct = high_end_filter_pct
 
@@ -110,57 +110,57 @@ class TrainedCCGParser():
                 2. Parse Trees -> Semantic Representation
                 3. Semantic Representation -> Labeling Function
         """
-        cut_off = int(len(self.loaded_data) * 0.2)
-        for i, datapoint in enumerate(self.loaded_data):
-            if len(datapoint.raw_explanation):
-                tokenizations = self.loaded_data[i].tokenized_explanations
-                logic_forms = []
-                for tokenization in tokenizations:
-                    try:
-                        parses = list(utils.parse_tokens(tokenization, self.grammar))
-                        logic_forms += parses
-                    except:
-                        continue
-                semantic_counts = {}
-                if len(logic_forms):
-                    semantic_counts = {}
-                    for parse in logic_forms:
-                        semantic_repr = utils.create_semantic_repr_ziqi(parse)
-                        if semantic_repr:
-                            if semantic_repr in semantic_counts:
-                                semantic_counts[semantic_repr] += 1
-                            else:
-                                semantic_counts[semantic_repr] = 1
+        # cut_off = int(len(self.loaded_data) * 0.2)
+        # for i, datapoint in enumerate(self.loaded_data):
+        #     if len(datapoint.raw_explanation):
+        #         tokenizations = self.loaded_data[i].tokenized_explanations
+        #         logic_forms = []
+        #         for tokenization in tokenizations:
+        #             try:
+        #                 parses = list(utils.parse_tokens(tokenization, self.grammar))
+        #                 logic_forms += parses
+        #             except:
+        #                 continue
+        #         semantic_counts = {}
+        #         if len(logic_forms):
+        #             semantic_counts = {}
+        #             for parse in logic_forms:
+        #                 semantic_repr = utils.create_semantic_repr_ziqi(parse)
+        #                 if semantic_repr:
+        #                     if semantic_repr in semantic_counts:
+        #                         semantic_counts[semantic_repr] += 1
+        #                     else:
+        #                         semantic_counts[semantic_repr] = 1
                     
-                    if len(semantic_counts) > 1:
-                        semantic_counts = utils.check_clauses_in_parse_filter(semantic_counts)
+        #             if len(semantic_counts) > 1:
+        #                 semantic_counts = utils.check_clauses_in_parse_filter(semantic_counts)
 
-                self.loaded_data[i].semantic_counts = semantic_counts
+        #         self.loaded_data[i].semantic_counts = semantic_counts
 
-                labeling_functions = {}
-                if len(semantic_counts):
-                    for key in semantic_counts:
-                        labeling_function = utils.create_labeling_function(key)
-                        if labeling_function:
-                            try:
-                                if labeling_function(datapoint.sentence): # filtering out labeling functions that don't even apply on their own datapoint
-                                    labeling_functions[key] = labeling_function
-                            except:
-                                continue                                    
+        #         labeling_functions = {}
+        #         if len(semantic_counts):
+        #             for key in semantic_counts:
+        #                 labeling_function = utils.create_labeling_function(key)
+        #                 if labeling_function:
+        #                     try:
+        #                         if labeling_function(datapoint.sentence): # filtering out labeling functions that don't even apply on their own datapoint
+        #                             labeling_functions[key] = labeling_function
+        #                     except:
+        #                         continue                                    
 
-                self.loaded_data[i].labeling_functions = labeling_functions
+        #         self.loaded_data[i].labeling_functions = labeling_functions
 
-            if verbose:
-                if i > 0 and i % cut_off == 0:
-                    print("Parser: 20% more explanations parsed")
+        #     if verbose:
+        #         if i > 0 and i % cut_off == 0:
+        #             print("Parser: 20% more explanations parsed")
         
-        with open("loaded_data.p", "wb") as f:
-            dill.dump(self.loaded_data, f)
+        # with open("loaded_data.p", "wb") as f:
+        #     dill.dump(self.loaded_data, f)
         
-        # with open("loaded_data.p", "rb") as f:
-        #     self.loaded_data = dill.load(f)
+        with open("loaded_data.p", "rb") as f:
+            self.loaded_data = dill.load(f)
         
-    def matrix_filter(self, unlabeled_data):
+    def matrix_filter(self, unlabeled_data, task="re"):
         """
         Version of BabbleLabbel's filter bank concept. Label Functions that don't apply to the original
         sentence that the explanation was written about have already been filtered out in build_labeling_rules.
@@ -177,6 +177,10 @@ class TrainedCCGParser():
         semantic_reps = []
         raw_explanations = []
         function_label_map = {}
+
+        if task == "re":
+            ner_types = []
+
         for i, datapoint in enumerate(self.loaded_data):
             labeling_functions_dict = datapoint.labeling_functions
             for key in labeling_functions_dict:
@@ -186,13 +190,30 @@ class TrainedCCGParser():
                 raw_explanations.append(datapoint.raw_explanation)
                 function_label_map[function] = datapoint.label
 
+                if task == "re":
+                    original_phrase = datapoint.sentence
+                    subj_type = original_phrase.ners[original_phrase.subj_posi].lower()
+                    obj_type = original_phrase.ners[original_phrase.obj_posi].lower()
+                    ner_types.append((subj_type, obj_type))
+
         
         matrix = [[] for i in range(len(labeling_functions))]
 
         for i, function in enumerate(labeling_functions):
             for entry in unlabeled_data:
                 try:
-                    matrix[i].append(int(function(entry)))
+                    if function(entry):
+                        if task == "re":
+                            subj_type = entry.ners[entry.subj_posi].lower()
+                            obj_type = entry.ners[entry.obj_posi].lower()
+                            if ner_types[i][0] == subj_type and ner_types[i][1] == obj_type:
+                                matrix[i].append(1)
+                            else:
+                                matrix[i].append(0)
+                        else:
+                            matrix[i].append(1)
+                    else:
+                        matrix[i].append(0)
                 except:
                     matrix[i].append(0)
         
@@ -217,6 +238,8 @@ class TrainedCCGParser():
             del labeling_functions[index]
             del semantic_reps[index]
             del raw_explanations[index]
+            if task == "re":
+                del ner_types[index]
         
         hashes = {}
         functions_to_delete = []
@@ -234,19 +257,28 @@ class TrainedCCGParser():
             del labeling_functions[index]
             del semantic_reps[index]
             del raw_explanations[index]
+            if task == "re":
+                del ner_types[index]
 
         self.labeling_functions = {}
         self.semantic_reps = {}
         self.filtered_raw_explanations = {}
+        if task == "re":
+            self.ner_types = {}
         for i, function in enumerate(labeling_functions):
             self.labeling_functions[function] = function_label_map[function]
             self.semantic_reps[semantic_reps[i]] = function
             self.filtered_raw_explanations[semantic_reps[i]] = raw_explanations[i]
+            
+            if task == "re":
+                self.ner_types[function] = ner_types[i]
         
-    def set_final_datastructures(self):
+    def set_final_datastructures(self, task="re"):
         self.labeling_functions = {}
         self.semantic_reps = {}
         self.filtered_raw_explanations = {}
+        if task == "re":
+            self.ner_types = {}
         for i, datapoint in enumerate(self.loaded_data):
             labeling_functions_dict = datapoint.labeling_functions
             for key in labeling_functions_dict:
@@ -254,6 +286,12 @@ class TrainedCCGParser():
                 self.labeling_functions[function] = datapoint.label
                 self.semantic_reps[key] = function
                 self.filtered_raw_explanations[key] = datapoint.raw_explanation
+
+                if task == "re":
+                    original_phrase = datapoint.sentence
+                    subj_type = original_phrase.ners[original_phrase.subj_posi].lower()
+                    obj_type = original_phrase.ners[original_phrase.obj_posi].lower()
+                    self.ner_types[function] = (subj_type, obj_type)
 
 
     def build_soft_labeling_functions(self):
@@ -340,11 +378,11 @@ class CCGParserTrainer():
             self.prepare_unlabeled_data(self.params["unlabeled_data_file"])
             if verbose:
                 print("Parser: Prepared unlabeled data")
-            self.parser.matrix_filter(self.unlabeled_data)
+            self.parser.matrix_filter(self.unlabeled_data, self.params["task"])
             if verbose:
                 print("Parser: Filtered out bad explanations")
         else:
-            self.parser.set_final_datastructures()
+            self.parser.set_final_datastructures(self.params["task"])
             if verbose:
                 print("Parser: Set labeling functions")
         if build_soft_functions:

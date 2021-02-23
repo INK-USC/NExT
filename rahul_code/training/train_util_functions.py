@@ -121,7 +121,7 @@ def create_parser(parser_training_data, explanation_path, dataset="tacred"):
 
     return parser
 
-def match_training_data(labeling_functions, train):
+def match_training_data(labeling_functions, train, dataset, ner_types=None):
 
     # phrases = [generate_phrase(entry, nlp) for entry in train]
 
@@ -139,9 +139,17 @@ def match_training_data(labeling_functions, train):
         for function in labeling_functions:
             try:
                 if function(phrase):
-                    matched_data_tuples.append((phrase.sentence, labeling_functions[function]))
-                    not_matched = False
-                    break
+                    if dataset == "tacred":
+                        subj_type = phrase.ners[phrase.subj_posi].lower()
+                        obj_type = phrase.ners[phrase.obj_posi].lower()
+                        if ner_types[function][0] == subj_type and ner_types[function][1] == obj_type:
+                            matched_data_tuples.append((phrase.sentence, labeling_functions[function]))
+                            not_matched = False
+                            break
+                    else:
+                        matched_data_tuples.append((phrase.sentence, labeling_functions[function]))
+                        not_matched = False
+                        break
             except:
                 continue
         if not_matched: 
@@ -224,6 +232,8 @@ def build_datasets_from_splits(train_path, dev_path, test_path, vocab_path, expl
     #     parser = dill.load(f)
     
     strict_labeling_functions = parser.labeling_functions
+
+    ner_types = parser.ner_types
     
     train_sample = None
     if sample_rate > 0:
@@ -231,9 +241,9 @@ def build_datasets_from_splits(train_path, dev_path, test_path, vocab_path, expl
         train_sample = random.sample(train, sample_number)
 
     if train_sample:
-        matched_data_tuples, unlabeled_data_phrases = match_training_data(strict_labeling_functions, train_sample)
+        matched_data_tuples, unlabeled_data_phrases = match_training_data(strict_labeling_functions, train_sample, dataset, ner_types)
     else:
-        matched_data_tuples, unlabeled_data_phrases = match_training_data(strict_labeling_functions, train)
+        matched_data_tuples, unlabeled_data_phrases = match_training_data(strict_labeling_functions, train, dataset, ner_types)
 
     # with open("matched_data_tuples.p", "rb") as f:
     #     matched_data_tuples = pickle.load(f)
