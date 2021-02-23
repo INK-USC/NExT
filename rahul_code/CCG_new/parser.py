@@ -234,7 +234,7 @@ class TrainedCCGParser():
         for i, function in enumerate(labeling_functions):
             self.labeling_functions[function] = function_label_map[function]
             self.semantic_reps[semantic_reps[i]] = function
-            self.semantic_reps[semantic_reps[i]] = raw_explanations[i]
+            self.filtered_raw_explanations[semantic_reps[i]] = raw_explanations[i]
         
     def set_final_datastructures(self):
         self.labeling_functions = {}
@@ -301,18 +301,20 @@ class CCGParserTrainer():
         self.parser.load_data(processed_data)
     
     def prepare_unlabeled_data(self, path=""):
-        if len(self.unlabeled_data) == 0 :
-            with open(path) as f:
-                data = json.load(f)
-        else:
-            data = self.unlabeled_data
-            self.unlabeled_data = []
-        for entry in data:
-            phrase_for_text = utils.generate_phrase(entry, nlp)
-            self.unlabeled_data.append(phrase_for_text)
+        # if len(self.unlabeled_data) == 0 :
+        #     with open(path) as f:
+        #         data = json.load(f)
+        # else:
+        #     data = self.unlabeled_data
+        #     self.unlabeled_data = []
+        # for entry in data:
+        #     phrase_for_text = utils.generate_phrase(entry, nlp)
+        #     self.unlabeled_data.append(phrase_for_text)
         
-        with open("training_phrases.p", "wb") as f:
-            pickle.dump(self.unlabeled_data, f)
+        # with open("training_phrases.p", "wb") as f:
+        #     pickle.dump(self.unlabeled_data, f)
+        with open("training_phrases.p", "rb") as f:
+            self.unlabeled_data = pickle.load(f)
 
     def train(self, matrix_filter=True, build_soft_functions=True, verbose=True):
         self.load_data(self.params["explanation_file"])
