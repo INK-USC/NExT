@@ -178,8 +178,9 @@ def build_labeled_dataset(sentences, labels, vocab, save_string, split, special_
 
 def build_word_to_idx(raw_explanations, vocab, save_string):
     quoted_words = []
-    for i, expl in enumerate(raw_explanations):
-        queries = extract_queries_from_explanations(expl)
+    for i, key in enumerate(raw_explanations):
+        explanation = raw_explanations[key]
+        queries = extract_queries_from_explanations(explanation)
         for query in queries:
             query = clean_text(query)
             quoted_words.append(query)

@@ -14,6 +14,7 @@ import spacy
 import random
 import numpy as np
 import pdb
+import dill
 
 nlp = spacy.load("en_core_web_sm")
 
@@ -25,7 +26,7 @@ class TrainedCCGParser():
         Attributes:
             
     """
-    def __init__(self, low_end_filter_count=3, high_end_filter_pct=0.2):
+    def __init__(self, low_end_filter_count=10, high_end_filter_pct=0.2):
         self.loaded_data = None
         self.grammar = None
         # self.standard_ccg_parser = None
@@ -152,6 +153,12 @@ class TrainedCCGParser():
             if verbose:
                 if i > 0 and i % cut_off == 0:
                     print("Parser: 20% more explanations parsed")
+        
+        with open("loaded_data.p", "wb") as f:
+            dill.dump(self.loaded_data, f)
+        
+        # with open("loaded_data.p", "rb") as f:
+        #     self.loaded_data = dill.load(f)
         
     def matrix_filter(self, unlabeled_data):
         """
