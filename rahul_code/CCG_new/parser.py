@@ -63,10 +63,6 @@ class TrainedCCGParser():
         
         self.grammar = utils.add_rules_to_grammar(quote_words, init_grammar)
 
-    # def set_standard_parser(self, rule_set=chart.DefaultRuleSet):
-        # lex = lexicon.fromstring(self.grammar, True)
-        # self.standard_ccg_parser = chart.CCGChartParser(lex, rule_set)
-        
     def tokenize_explanations(self):
         """
             Assuming data has been loaded, and grammar and parser have been created, we start the process of
@@ -134,6 +130,10 @@ class TrainedCCGParser():
                                 semantic_counts[semantic_repr] += 1
                             else:
                                 semantic_counts[semantic_repr] = 1
+                    
+                    if len(semantic_counts) > 1:
+                        semantic_counts = utils.check_clauses_in_parse_filter(semantic_counts)
+
                 self.loaded_data[i].semantic_counts = semantic_counts
 
                 labeling_functions = {}
@@ -230,20 +230,33 @@ class TrainedCCGParser():
 
         self.labeling_functions = {}
         self.semantic_reps = {}
+        self.filtered_raw_explanations = {}
         for i, function in enumerate(labeling_functions):
             self.labeling_functions[function] = function_label_map[function]
-            self.semantic_reps[semantic_reps[i]] = function_label_map[function]
+            self.semantic_reps[semantic_reps[i]] = function
+            self.semantic_reps[semantic_reps[i]] = raw_explanations[i]
         
-        self.filtered_raw_explanations = raw_explanations
+    def set_final_datastructures(self):
+        self.labeling_functions = {}
+        self.semantic_reps = {}
+        self.filtered_raw_explanations = {}
+        for i, datapoint in enumerate(self.loaded_data):
+            labeling_functions_dict = datapoint.labeling_functions
+            for key in labeling_functions_dict:
+                function = labeling_functions_dict[key]
+                self.labeling_functions[function] = datapoint.label
+                self.semantic_reps[key] = function
+                self.filtered_raw_explanations[key] = datapoint.raw_explanation
+
 
     def build_soft_labeling_functions(self):
         self.soft_labeling_functions = []
-        soft_filtered_raw_explanations = []
-        for i, key in enumerate(self.semantic_reps):
+        soft_filtered_raw_explanations = {}
+        for key in self.semantic_reps:
             soft_labeling_function = utils.create_soft_labeling_function(key)
             if soft_labeling_function:
-                self.soft_labeling_functions.append((soft_labeling_function, self.semantic_reps[key]))
-                soft_filtered_raw_explanations.append(self.filtered_raw_explanations[i])
+                self.soft_labeling_functions.append((soft_labeling_function, self.labeling_functions[self.semantic_reps[key]]))
+                soft_filtered_raw_explanations[key] = self.filtered_raw_explanations[key]
         
         self.filtered_raw_explanations = soft_filtered_raw_explanations
 
@@ -255,7 +268,7 @@ class CCGParserTrainer():
             params             (dict) : dictionary holding hyperparameters for training
             parser (TrainedCCGParser) : a TrainedCCGParser instance
     """
-    def __init__(self, task, explanation_file, unlabeled_data_file, build_soft_functions=True, unlabeled_data=None):
+    def __init__(self, task, explanation_file, unlabeled_data_file="", unlabeled_data=None):
         self.params = {}
         self.params["explanation_file"] = explanation_file
         self.params["unlabeled_data_file"] = unlabeled_data_file
@@ -271,7 +284,6 @@ class CCGParserTrainer():
             self.label_key = "label"
         self.parser = TrainedCCGParser()
         self.unlabeled_data = unlabeled_data if unlabeled_data != None else []
-        self.build_soft_functions = build_soft_functions
     
     def load_data(self, path):
         with open(path) as f:
@@ -288,7 +300,7 @@ class CCGParserTrainer():
         
         self.parser.load_data(processed_data)
     
-    def prepare_unlabeled_data(self, path):
+    def prepare_unlabeled_data(self, path=""):
         if len(self.unlabeled_data) == 0 :
             with open(path) as f:
                 data = json.load(f)
@@ -299,7 +311,7 @@ class CCGParserTrainer():
             phrase_for_text = utils.generate_phrase(entry, nlp)
             self.unlabeled_data.append(phrase_for_text)
 
-    def train(self, verbose=True):
+    def train(self, matrix_filter=False, build_soft_functions=True, verbose=True):
         self.load_data(self.params["explanation_file"])
         if verbose:
             print("Parser: Loaded explanation data")
@@ -309,19 +321,21 @@ class CCGParserTrainer():
         self.parser.tokenize_explanations()
         if verbose:
             print("Parser: Tokenized Explanations")
-        # self.parser.set_standard_parser()
-        # if verbose:
-        #     print("Parser: Set Up CCG Parser")
         self.parser.build_labeling_rules()
         if verbose:
             print("Parser: Built Labeling Rules")
-        self.prepare_unlabeled_data(self.params["unlabeled_data_file"])
-        if verbose:
-            print("Parser: Prepared unlabeled data")
-        self.parser.matrix_filter(self.unlabeled_data)
-        if verbose:
-            print("Parser: Filtered out bad explanations")
-        if self.build_soft_functions:
+        if matrix_filter:
+            self.prepare_unlabeled_data(self.params["unlabeled_data_file"])
+            if verbose:
+                print("Parser: Prepared unlabeled data")
+            self.parser.matrix_filter(self.unlabeled_data)
+            if verbose:
+                print("Parser: Filtered out bad explanations")
+        else:
+            self.parser.set_final_datastructures()
+            if verbose:
+                print("Parser: Set labeling functions")
+        if build_soft_functions:
             self.parser.build_soft_labeling_functions()
             if verbose:
                 print("Parser: Built out soft labeling functions")

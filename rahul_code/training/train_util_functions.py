@@ -107,11 +107,11 @@ def set_tacred_ner_label_space():
     set_ner_label_space(temp)
     set_ner_label_space(TACRED_NERS)
 
-def create_parser(parser_training_data, explanation_path, dataset="tacred"):
+def create_parser(explanation_path, dataset="tacred"):
     parser_trainer = None
     
     if dataset == "tacred":
-        parser_trainer = CCGParserTrainer("re", explanation_path, "", True, parser_training_data)
+        parser_trainer = CCGParserTrainer("re", explanation_path, "")
     
     parser_trainer.train()
     parser = parser_trainer.get_parser()
@@ -214,10 +214,10 @@ def build_datasets_from_splits(train_path, dev_path, test_path, vocab_path, expl
 
     # parser_training_data = random.sample(train, min(PARSER_TRAIN_SAMPLE, len(train)))
     
-    # parser = create_parser(parser_training_data, explanation_path, dataset)
+    parser = create_parser(explanation_path, dataset)
 
-    with open("../data/training_data/parser.p", "rb") as f:
-        parser = dill.load(f)
+    # with open("../data/training_data/parser.p", "rb") as f:
+    #     parser = dill.load(f)
     
     strict_labeling_functions = parser.labeling_functions
     

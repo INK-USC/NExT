@@ -488,6 +488,50 @@ def create_semantic_repr(parse_tree):
     except:
         return False
 
+def _detect_semantic_token(semantic_tree, token):
+    return token in semantic_tree
+
+def _count_correct_between_parses(semantic_tree):
+    correct_between_clauses = ["('@between', ('@And', 'ArgY', 'ArgX'))", 
+                               "('@between', ('@And', 'ArgX', 'ArgY'))"]
+        
+    count = semantic_tree.count(correct_between_clauses[0]) + \
+            semantic_tree.count(correct_between_clauses[1])
+    
+    return count
+
+def _count_correct_num_parses(semantic_tree):
+    num_regex = "\('\@Num', '[0-9]+', 'tokens'\)"
+    count = len(re.findall(num_regex, semantic_tree))
+    
+    return count
+
+def check_clauses_in_parse_filter(semantic_counts):
+    contains_between_clause = False
+    contains_num_clause = False
+    for key in semantic_counts:
+        key_str = str(key)
+        contains_between_clause = _detect_semantic_token(key_str, "@between")
+        contains_num_clause = _detect_semantic_token(key_str, "@Num")
+    
+    if contains_between_clause or contains_num_clause:
+        max_correct_count = 0
+        correct_semantic_rep = None
+        for key in semantic_counts:
+            count = 0
+            key_str = str(key)
+            if contains_between_clause:
+                count += _count_correct_between_parses(key_str)
+            if contains_num_clause:
+                count += _count_correct_num_parses(key_str)
+            if count > max_correct_count:
+                correct_semantic_rep = {key : semantic_counts[key]}
+                max_correct_count = count
+        
+        return correct_semantic_rep
+    
+    return semantic_counts
+
 def create_labeling_function(semantic_repr, level=0):
     """
         Creates a labeling function (lambda function) from a hierarchical tuple representation
