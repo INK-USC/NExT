@@ -361,7 +361,7 @@ class CCGParserTrainer():
         with open("training_phrases.p", "rb") as f:
             self.unlabeled_data = pickle.load(f)
 
-    def train(self, matrix_filter=True, build_soft_functions=True, verbose=True):
+    def train(self, matrix_filter=False, build_soft_functions=True, verbose=True):
         self.load_data(self.params["explanation_file"])
         if verbose:
             print("Parser: Loaded explanation data")
