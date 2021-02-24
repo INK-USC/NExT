@@ -326,7 +326,7 @@ def evaluate_next_clf(data_path, model, label_map, no_relation_thresholds=None,
             entropy = torch.sum(class_probs * -1.0 * torch.log(class_probs), axis=1).cpu().numpy()
             class_preds = torch.argmax(class_probs, dim=1).cpu().numpy()
             
-            entropy_final_class_preds = _apply_no_relation_label(max_probs, class_preds, label_map,\
+            entropy_final_class_preds = _apply_no_relation_label(entropy, class_preds, label_map,\
                                                                  no_relation_key, entropy_threshold)
 
             max_value_final_class_preds = _apply_no_relation_label(max_probs, class_preds, label_map,\
