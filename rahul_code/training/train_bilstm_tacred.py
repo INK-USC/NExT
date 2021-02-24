@@ -57,7 +57,7 @@ def main():
                         type=int,
                         help="Total batch size for eval.")
     parser.add_argument("--learning_rate",
-                        default=0.001,
+                        default=0.,
                         type=float,
                         help="The initial learning rate for Adam.")
     parser.add_argument("--epochs",
