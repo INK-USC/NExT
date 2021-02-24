@@ -78,7 +78,7 @@ def main():
                         help="embedding vector size")
     parser.add_argument('--hidden_dim',
                         type=int,
-                        default=300,
+                        default=100,
                         help="hidden vector size of lstm (really 2*hidden_dim, due to bilstm)")
     parser.add_argument('--model_save_dir',
                         type=str,

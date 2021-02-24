@@ -4,7 +4,7 @@ import torch.nn.functional as f
 
 class BiLSTM_Att_Clf(nn.Module):
     def __init__(self, emb_weight, padding_idx, emb_dim, hidden_dim, cuda, number_of_classes, tuneable_vector_count,
-                 n_layers=2, encoding_dropout=0.5, padding_score=-1e30):
+                 n_layers=2, encoding_dropout=0.2, padding_score=-1e30):
         """
             Arguments:
                 emb_weight (torch.tensor) : created vocabulary's vector representation for each token, where
@@ -39,7 +39,7 @@ class BiLSTM_Att_Clf(nn.Module):
         self.frozen_embeddings = nn.Embedding.from_pretrained(frozen_weights, freeze=True)
 
         self.embeddings = nn.Embedding.from_pretrained(emb_weight, freeze=False, padding_idx=self.padding_idx)
-        self.encoding_bilstm = nn.LSTM(self.emb_dim, self.hidden_dim, num_layers=n_layers, dropout=0.3,
+        self.encoding_bilstm = nn.LSTM(self.emb_dim, self.hidden_dim, num_layers=n_layers, dropout=0.1,
                                        bidirectional=True, batch_first=True)
         self.encoding_dropout = nn.Dropout(p=encoding_dropout)
         
@@ -50,17 +50,17 @@ class BiLSTM_Att_Clf(nn.Module):
         nn.init.kaiming_uniform_(self.attention_vector.weight, mode='fan_in')
         self.attn_softmax = nn.Softmax(dim=2)
 
-        # self.weight_linear_layer_2 = nn.Linear(self.encoding_dim, 128)
-        # nn.init.kaiming_uniform_(self.weight_linear_layer_2.weight, a=0.01, mode='fan_in')
+        self.weight_linear_layer_2 = nn.Linear(self.encoding_dim, 128)
+        nn.init.kaiming_uniform_(self.weight_linear_layer_2.weight, a=0.01, mode='fan_in')
         
-        # self.weight_linear_layer_3 = nn.Linear(128, 64)
-        # nn.init.kaiming_uniform_(self.weight_linear_layer_3.weight, a=0.01, mode='fan_in')
+        self.weight_linear_layer_3 = nn.Linear(128, 64)
+        nn.init.kaiming_uniform_(self.weight_linear_layer_3.weight, a=0.01, mode='fan_in')
         
-        # self.weight_activation_function = nn.LeakyReLU()
+        self.weight_activation_function = nn.LeakyReLU()
         
-        self.mlp_dropout = nn.Dropout(p=0.7)
+        self.mlp_dropout = nn.Dropout(p=0.3)
 
-        self.weight_final_layer = nn.Linear(self.encoding_dim, self.number_of_classes)
+        self.weight_final_layer = nn.Linear(64, self.number_of_classes)
         nn.init.kaiming_uniform_(self.weight_final_layer.weight, a=0.01, mode='fan_in')
     
     def get_attention_weights(self, hidden_states, padding_indexes=None):
@@ -163,15 +163,15 @@ class BiLSTM_Att_Clf(nn.Module):
         """
         compressed_vector = self.mlp_dropout(pooled_vectors)
         
-        # compressed_vector = self.weight_linear_layer_2(compressed_vector)
-        # compressed_vector = self.weight_activation_function(compressed_vector)
+        compressed_vector = self.weight_linear_layer_2(compressed_vector)
+        compressed_vector = self.weight_activation_function(compressed_vector)
 
-        # compressed_vector = self.mlp_dropout(compressed_vector)
+        compressed_vector = self.mlp_dropout(compressed_vector)
 
-        # compressed_vector = self.weight_linear_layer_3(compressed_vector) # N x 64
-        # compressed_vector = self.weight_activation_function(compressed_vector)
+        compressed_vector = self.weight_linear_layer_3(compressed_vector) # N x 64
+        compressed_vector = self.weight_activation_function(compressed_vector)
 
-        # compressed_vector = self.mlp_dropout(compressed_vector)
+        compressed_vector = self.mlp_dropout(compressed_vector)
             
         classification_scores = self.weight_final_layer(compressed_vector) # N x number_of_classes
 
