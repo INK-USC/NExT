@@ -8,7 +8,7 @@ from training.train_util_functions import batch_type_restrict, build_phrase_inpu
                                    set_tacred_ner_label_space, build_datasets_from_splits, evaluate_next_clf
 from training.util_functions import similarity_loss_function, generate_save_string
 from training.util_classes import BaseVariableLengthDataset
-from training.constants import TACRED_LABEL_MAP, FIND_MODULE_HIDDEN_DIM
+from training.constants import TACRED_LABEL_MAP, FIND_MODULE_HIDDEN_DIM, NUMBER_OF_TUNEABLE_VECTORS
 from models import BiLSTM_Att_Clf, Find_Module
 import pickle
 from tqdm import tqdm
@@ -123,7 +123,7 @@ def main():
     
     with open(args.vocab_path, "rb") as f:
         vocab = pickle.load(f)
-    
+     
     dev_path = "../data/training_data/dev_data_{}.p".format(save_string)
     test_path = "../data/training_data/test_data_{}.p".format(save_string)
     
@@ -135,7 +135,7 @@ def main():
         device = torch.device("cpu")
 
     clf = BiLSTM_Att_Clf.BiLSTM_Att_Clf(vocab.vectors, pad_idx, args.emb_dim, args.hidden_dim,
-                                        torch.cuda.is_available(), number_of_classes)
+                                        torch.cuda.is_available(), number_of_classes, NUMBER_OF_TUNEABLE_VECTORS+2)
     
     del vocab
 

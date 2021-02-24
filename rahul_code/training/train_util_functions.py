@@ -83,14 +83,14 @@ def _prepare_labels(labels, dataset="tacred"):
             converted_labels.append(TACRED_LABEL_MAP[label])
     return converted_labels
 
-def _prepare_unlabeled_data(unlabeled_data_phrases, vocab, special_words):
+def _prepare_unlabeled_data(unlabeled_data_phrases, vocab):
     seq_tokens = []
     seq_phrases = []
     for phrase in unlabeled_data_phrases:
         tokens = [token.lower() for token in phrase.tokens]
         ners = phrase.ners
         ners = [SPACY_TO_TACRED[ner] if ner in SPACY_TO_TACRED else ner for ner in ners]
-        tokens = [vocab[token] if token not in special_words else special_words[token] for token in tokens]
+        tokens = [vocab[token] for token in tokens]
         ners = [NER_LABEL_SPACE[ner] for ner in ners]
         seq_tokens.append(tokens)
         phrase.update_tokens_and_ners(tokens, ners)
@@ -157,9 +157,9 @@ def match_training_data(labeling_functions, train, dataset, ner_types=None):
 
     return matched_data_tuples, unlabeled_data_phrases
 
-def build_unlabeled_dataset(unlabeled_data_phrases, vocab, save_string, special_words):
+def build_unlabeled_dataset(unlabeled_data_phrases, vocab, save_string):
     pad_idx = vocab["<pad>"]
-    seq_tokens, seq_phrases = _prepare_unlabeled_data(unlabeled_data_phrases, vocab, special_words)
+    seq_tokens, seq_phrases = _prepare_unlabeled_data(unlabeled_data_phrases, vocab)
     dataset = UnlabeledTrainingDataset(seq_tokens, seq_phrases, pad_idx)
 
     print("Finished building unlabeled dataset of size: {}".format(str(len(seq_tokens))))
@@ -169,10 +169,10 @@ def build_unlabeled_dataset(unlabeled_data_phrases, vocab, save_string, special_
     with open(file_name, "wb") as f:
         pickle.dump(dataset, f)
 
-def build_labeled_dataset(sentences, labels, vocab, save_string, split, special_words, dataset="tacred"):
+def build_labeled_dataset(sentences, labels, vocab, save_string, split, dataset="tacred"):
     pad_idx = vocab["<pad>"]
     sentences = [clean_text(sentence) for sentence in sentences]
-    seq_tokens = convert_text_to_tokens(sentences, vocab, tokenize, special_words)
+    seq_tokens = convert_text_to_tokens(sentences, vocab, tokenize)
     label_ids = _prepare_labels(labels, dataset)
 
     dataset = TrainingDataset(seq_tokens, label_ids, pad_idx)
@@ -219,11 +219,6 @@ def build_datasets_from_splits(train_path, dev_path, test_path, vocab_path, expl
     with open(vocab_path, "rb") as f:
         vocab = pickle.load(f)
 
-    if dataset == "tacred":
-        subj_idx = len(vocab)
-        obj_idx = subj_idx + 1
-        special_words = {"subj" : subj_idx, "obj" : obj_idx}
-
     parser_training_data = random.sample(train, min(PARSER_TRAIN_SAMPLE, len(train)))
     
     parser = create_parser(parser_training_data, explanation_path, dataset)
@@ -251,25 +246,25 @@ def build_datasets_from_splits(train_path, dev_path, test_path, vocab_path, expl
     # with open("unlabeled_data.p", "rb") as f:
     #     unlabeled_data_phrases = pickle.load(f)
     
-    build_unlabeled_dataset(unlabeled_data_phrases, vocab, save_string, special_words)
+    build_unlabeled_dataset(unlabeled_data_phrases, vocab, save_string)
 
     build_labeled_dataset([tup[0] for tup in matched_data_tuples], 
                           [tup[1] for tup in matched_data_tuples],
-                          vocab, save_string, "matched",  special_words, dataset)
+                          vocab, save_string, "matched", dataset)
 
     with open(dev_path) as f:
         dev = json.load(f)
     
     build_labeled_dataset([ent["text"] for ent in dev], 
                           [ent["label"] for ent in dev],
-                          vocab, save_string, "dev", special_words, dataset)
+                          vocab, save_string, "dev", dataset)
     
     with open(test_path) as f:
         test = json.load(f)
     
     build_labeled_dataset([ent["text"] for ent in test], 
                           [ent["label"] for ent in test],
-                          vocab, save_string, "test", special_words, dataset)
+                          vocab, save_string, "test", dataset)
 
     filtered_raw_explanations = parser.filtered_raw_explanations
 

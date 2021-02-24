@@ -23,7 +23,7 @@ class Find_Module(nn.Module):
     """
     def __init__(self, emb_weight, padding_idx, emb_dim, hidden_dim, cuda,
                  n_layers=2, encoding_dropout=0.1, sliding_win_size=3,
-                 padding_score=-1e30, add_subj_obj=True):
+                 padding_score=-1e30):
         """
             Arguments:
                 emb_weight (torch.tensor) : created vocabulary's vector representation for each token, where
@@ -52,11 +52,6 @@ class Find_Module(nn.Module):
         self.sliding_win_size = sliding_win_size
         self.number_of_cosines = sum([i+1 for i in range(self.sliding_win_size)])
         self.cuda = cuda
-
-        if add_subj_obj:
-            subj_vector = torch.randn(1, emb_dim)
-            obj_vector = torch.randn(1, emb_dim)
-            emb_weight = torch.cat([emb_weight, subj_vector, obj_vector], dim=0)
 
         self.embeddings = nn.Embedding.from_pretrained(emb_weight, freeze=False, padding_idx=self.padding_idx)
         self.encoding_bilstm = nn.LSTM(self.emb_dim, self.hidden_dim, num_layers=n_layers,

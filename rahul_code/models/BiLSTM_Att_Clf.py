@@ -3,8 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as f
 
 class BiLSTM_Att_Clf(nn.Module):
-    def __init__(self, emb_weight, padding_idx, emb_dim, hidden_dim, cuda, number_of_classes,
-                 n_layers=2, encoding_dropout=0.5, padding_score=-1e30, add_subj_obj=True):
+    def __init__(self, emb_weight, padding_idx, emb_dim, hidden_dim, cuda, number_of_classes, tuneable_vector_count,
+                 n_layers=2, encoding_dropout=0.5, padding_score=-1e30):
         """
             Arguments:
                 emb_weight (torch.tensor) : created vocabulary's vector representation for each token, where
@@ -30,11 +30,13 @@ class BiLSTM_Att_Clf(nn.Module):
         self.hidden_dim = hidden_dim
         self.encoding_dim = 2*hidden_dim
         self.number_of_classes = number_of_classes
+        self.tuneable_vector_count = tuneable_vector_count
 
-        if add_subj_obj:
-            subj_vector = torch.randn(1, emb_dim)
-            obj_vector = torch.randn(1, emb_dim)
-            emb_weight = torch.cat([emb_weight, subj_vector, obj_vector], dim=0)
+        tuneable_weights = emb_weight[:self.tuneable_vector_count]
+        frozen_weights = torch.cat([emb_weight[0].unsqueeze(0), emb_weight[self.tuneable_vector_count:]])
+
+        self.tuneable_embeddings = nn.Embedding.from_pretrained(tuneable_weights, freeze=False)
+        self.frozen_embeddings = nn.Embedding.from_pretrained(frozen_weights, freeze=True)
 
         self.embeddings = nn.Embedding.from_pretrained(emb_weight, freeze=False, padding_idx=self.padding_idx)
         self.encoding_bilstm = nn.LSTM(self.emb_dim, self.hidden_dim, num_layers=n_layers, dropout=0.3,
@@ -112,9 +114,25 @@ class BiLSTM_Att_Clf(nn.Module):
         """
         padding_indexes = seqs == self.padding_idx # N x seq_len
         padding_indexes = padding_indexes.float()
-        
-        seq_embs = self.embeddings(seqs) # seq_embs = N x seq_len x embedding_dim
-        
+
+        mask = seqs < self.tuneable_vector_count
+
+        # You may want to optimize it, you could probably get away without copy, though
+        # I'm not currently sure how
+        seqs_copy = seqs.clone().detach()
+        # Subtracting token ids by constant
+        seqs_copy -= (self.tuneable_vector_count - 1)
+        seqs_copy[mask] = 0
+
+        frozen_embs = self.frozen_embeddings(seqs_copy)
+    
+        seqs[~mask] = 0
+        seq_embs = self.tuneable_embeddings(seqs)
+
+        # And finally change appropriate tokens from placeholder embedding created by
+        # pretrained into trainable embeddings.
+        seq_embs[~mask] = frozen_embs[~mask] # seq_embs = N x seq_len x embedding_dim
+                
         return seq_embs, padding_indexes
     
     def encode_tokens(self, seqs):

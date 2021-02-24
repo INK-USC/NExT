@@ -109,7 +109,7 @@ def build_vocab(train, embedding_name, save_string="", save=True):
 
     return vocab
 
-def convert_text_to_tokens(data, vocab, tokenize_fn, special_words={}):
+def convert_text_to_tokens(data, vocab, tokenize_fn):
     """
         Converts sequences of text to sequences of token ids per the provided vocabulary
 
@@ -123,7 +123,7 @@ def convert_text_to_tokens(data, vocab, tokenize_fn, special_words={}):
 
     """
     word_seqs = [tokenize_fn(seq) for seq in data]
-    token_seqs = [[vocab[word] if word not in special_words else special_words[word] for word in word_seq] for word_seq in word_seqs]
+    token_seqs = [[vocab[word] for word in word_seq] for word_seq in word_seqs]
 
     return token_seqs
 
