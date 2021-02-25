@@ -26,9 +26,11 @@ class BaseVariableLengthDataset(ABC):
         n_ex = len(batch)
         max_len = max(len(seq) for seq in batch)
         seqs_tensor = torch.full(size=(n_ex, max_len), fill_value=fill_value, dtype=dtype)
+        lengths = []
         for i, seq in enumerate(batch):
-            seqs_tensor[i, 0:len(seq)] = torch.tensor(seq) 
-        return seqs_tensor
+            seqs_tensor[i, 0:len(seq)] = torch.tensor(seq)
+            lengths.append(len(seq))
+        return seqs_tensor, lengths
 
 class PreTrainingFindModuleDataset(BaseVariableLengthDataset):
     """
@@ -79,11 +81,11 @@ class PreTrainingFindModuleDataset(BaseVariableLengthDataset):
             self.tokens, self.queries, self.labels = zip(*temp_data)
         for i in range(0, len(self.tokens), batch_size): # i incrememt by batch_size
             batch_tokens = self.tokens[i: i+batch_size] # slice
-            batch_tokens = self.variable_length_batch_as_tensors(batch_tokens, self.pad_idx)
+            batch_tokens, _ = self.variable_length_batch_as_tensors(batch_tokens, self.pad_idx)
             batch_queries = self.queries[i: i+batch_size]
-            batch_queries = self.variable_length_batch_as_tensors(batch_queries, self.pad_idx)
+            batch_queries, _ = self.variable_length_batch_as_tensors(batch_queries, self.pad_idx)
             batch_labels = self.labels[i: i+batch_size]
-            batch_labels = self.variable_length_batch_as_tensors(batch_labels, 0.0, torch.float)
+            batch_labels, _ = self.variable_length_batch_as_tensors(batch_labels, 0.0, torch.float)
             yield (batch_tokens, batch_queries, batch_labels)
     
 class TrainingDataset(BaseVariableLengthDataset):
@@ -140,9 +142,9 @@ class TrainingDataset(BaseVariableLengthDataset):
         
         for i in range(0, len(tokens), batch_size): # i incrememt by batch_size
             batch_tokens = tokens[i: i+batch_size] # slice
-            batch_tokens = self.variable_length_batch_as_tensors(batch_tokens, self.pad_idx)
+            batch_tokens, batch_lengths = self.variable_length_batch_as_tensors(batch_tokens, self.pad_idx)
             batch_labels = torch.tensor(labels[i: i+batch_size])
-            yield (batch_tokens, batch_labels)
+            yield (batch_tokens, batch_lengths, batch_labels)
 
 class UnlabeledTrainingDataset(BaseVariableLengthDataset):
     """
@@ -157,7 +159,7 @@ class UnlabeledTrainingDataset(BaseVariableLengthDataset):
         """
             Arguments:
                 tokens  (arr) : dataset of token_ids, can be of variable length
-                phrases  (arr) : labels indiciating where the query was extracted from in the original instance
+                phrases  (arr) :
                 pad_idx (int) : index that should be used to pad token sequences and query seqeunces to
                                 ensure all instances in a batch are of the same length
         """
@@ -188,6 +190,6 @@ class UnlabeledTrainingDataset(BaseVariableLengthDataset):
             self.tokens, self.phrases = zip(*temp_data)
         for i in range(0, len(self.tokens), batch_size): # i incrememt by batch_size
             batch_tokens = self.tokens[i: i+batch_size] # slice
-            batch_tokens = self.variable_length_batch_as_tensors(batch_tokens, self.pad_idx)
+            batch_tokens, batch_lengths = self.variable_length_batch_as_tensors(batch_tokens, self.pad_idx)
             batch_phrases= self.phrases[i: i+batch_size]
-            yield (batch_tokens, batch_phrases)
+            yield (batch_tokens, batch_lengths, batch_phrases)

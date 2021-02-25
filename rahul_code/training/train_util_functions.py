@@ -289,8 +289,8 @@ def _apply_no_relation_label(values, preds, label_map, no_relation_key, threshol
 
     return final_preds
 
-def evaluate_next_clf(data_path, model, label_map, no_relation_thresholds=None,
-                      batch_size=128, no_relation_key="no_relation"):
+def evaluate_next_clf(data_path, model, strict_loss_fn, label_map, no_relation_thresholds=None,
+                      batch_size=128, hidden_dim=100, no_relation_key="no_relation"):
 
     with open(data_path, "rb") as f:
         eval_dataset = pickle.load(f)
@@ -303,27 +303,36 @@ def evaluate_next_clf(data_path, model, label_map, no_relation_thresholds=None,
     else:
         device = torch.device("cpu")
     
+    h0 = torch.empty(4, batch_size, hidden_dim).to(device)
+    c0 = torch.empty(4, batch_size, hidden_dim).to(device)
+    nn.init.xavier_normal_(h0)
+    nn.init.xavier_normal_(c0)
+    
     if no_relation_thresholds == None:
-        no_relation_thresholds = prep_and_tune_no_relation_threshold(model, eval_dataset, device, batch_size,\
+        no_relation_thresholds = prep_and_tune_no_relation_threshold(model, h0, c0, eval_dataset, device, batch_size,\
                                                                     label_map, no_relation_key)
     
     entropy_threshold, max_value_threshold = no_relation_thresholds
 
-    total_ent_f1_score, total_val_f1_score = 0, 0
+    strict_total_loss = 0
     total_class_probs = []
     batch_count = 0
     true_labels = []
     entropy_predictions = []
     max_val_predictions = []
     for step, batch in enumerate(tqdm(eval_dataset.as_batches(batch_size=batch_size, shuffle=False))):
-        batch = [r.to(device) for r in batch]
-        tokens, batch_labels = batch
+        # batch = [r.to(device) for r in batch]
+        tokens, seq_lengths, batch_labels = batch
+        tokens = tokens.to(device)
+        batch_labels = batch_labels.to(device)
         with torch.no_grad():
-            preds = model.forward(tokens)
-
+            preds = model.forward(tokens, seq_lengths, h0, c0)
             class_probs = nn.functional.softmax(preds, dim=1)
+
+            strict_loss = strict_loss_fn(preds, batch_labels)
+
             max_probs = torch.max(class_probs, dim=1).values.cpu().numpy()
-            entropy = torch.sum(class_probs * -1.0 * torch.log(class_probs), axis=1).cpu().numpy()
+            entropy = torch.sum(class_probs * -1.0 * torch.log(torch.clamp(class_probs, 1e-5, 1.0)), axis=1).cpu().numpy()
             class_preds = torch.argmax(class_probs, dim=1).cpu().numpy()
             
             entropy_final_class_preds = _apply_no_relation_label(entropy, class_preds, label_map,\
@@ -336,16 +345,18 @@ def evaluate_next_clf(data_path, model, label_map, no_relation_thresholds=None,
             max_val_predictions.append(max_value_final_class_preds)
             true_labels.append(f1_labels)
             
+            strict_total_loss += strict_loss.item()
             batch_count += 1
             total_class_probs.append(class_probs.cpu().numpy())
     
     _, _, avg_ent_f1_score = tacred_eval(list(np.concatenate(entropy_predictions)), list(np.concatenate(true_labels)))
     _, _, avg_val_f1_score = tacred_eval(list(np.concatenate(max_val_predictions)), list(np.concatenate(true_labels)))
     total_class_probs = np.concatenate(total_class_probs, axis=0)
+    avg_strict_loss = strict_total_loss / batch_count
 
-    return avg_ent_f1_score, avg_val_f1_score, total_class_probs, no_relation_thresholds
+    return avg_strict_loss, avg_ent_f1_score, avg_val_f1_score, total_class_probs, no_relation_thresholds
 
-def prep_and_tune_no_relation_threshold(model, eval_dataset, device, batch_size, label_map, no_relation_key):
+def prep_and_tune_no_relation_threshold(model, h0, c0, eval_dataset, device, batch_size, label_map, no_relation_key):
     
     if len(no_relation_key) == 0:
         return int(-1.0 * np.log(1/len(label_map))) + 1, -1.0
@@ -360,14 +371,14 @@ def prep_and_tune_no_relation_threshold(model, eval_dataset, device, batch_size,
     model.eval()
 
     for step, batch in enumerate(tqdm(eval_dataset.as_batches(batch_size=batch_size, shuffle=False, sample=sample_number))):
-        tokens, batch_labels = batch
+        tokens, seq_lengths, batch_labels = batch
         tokens = tokens.to(device)
 
         with torch.no_grad():
-            preds = model.forward(tokens) # b x c
+            preds = model.forward(tokens, seq_lengths, h0, c0) # b x c
             class_probs = nn.functional.softmax(preds, dim=1)
             max_probs = torch.max(class_probs, dim=1).values
-            entropy = torch.sum(class_probs * -1.0 * torch.log(class_probs), axis=1)
+            entropy = torch.sum(class_probs * -1.0 * torch.log(torch.clamp(class_probs, 1e-5, 1.0)), axis=1)
             class_preds = torch.argmax(class_probs, dim=1)
             
             entropy_values.append(entropy.cpu().numpy())
@@ -391,12 +402,13 @@ def prep_and_tune_no_relation_threshold(model, eval_dataset, device, batch_size,
     return no_relation_threshold_entropy, no_relation_threshold_max_value
     
 def tune_no_relation_threshold(values, preds, labels, label_map, no_relation_key="no_relation", entropy=True):
-    step = 0.01
+    step = 0.001
     if entropy:
         max_entropy_cut_off = int(-1.0 * np.log(1/len(label_map)) / step) + 1
-        thresholds = [0.01 * i for i in range(1, max_entropy_cut_off)]
+        thresholds = [step * i for i in range(1, max_entropy_cut_off)]
     else:
-        thresholds = [0.01 * i for i in range(1, 99)]
+        max_prob_cut_off = int(1/step) + 1
+        thresholds = [step * i for i in range(1, max_prob_cut_off)]
     best_f1 = 0
     best_threshold = -1
     for threshold in thresholds:

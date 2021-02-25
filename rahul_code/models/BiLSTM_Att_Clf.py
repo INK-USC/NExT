@@ -3,8 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as f
 
 class BiLSTM_Att_Clf(nn.Module):
-    def __init__(self, emb_weight, padding_idx, emb_dim, hidden_dim, cuda, number_of_classes, tuneable_vector_count,
-                 n_layers=2, encoding_dropout=0.4, padding_score=-1e30):
+    def __init__(self, emb_weight, padding_idx, emb_dim, hidden_dim, cuda, number_of_classes, tuneable_vector_count=None,
+                 n_layers=2, encoding_dropout=0.5, padding_score=-1e30):
         """
             Arguments:
                 emb_weight (torch.tensor) : created vocabulary's vector representation for each token, where
@@ -32,40 +32,41 @@ class BiLSTM_Att_Clf(nn.Module):
         self.number_of_classes = number_of_classes
         self.tuneable_vector_count = tuneable_vector_count
 
-        tuneable_weights = emb_weight[:self.tuneable_vector_count]
-        frozen_weights = torch.cat([emb_weight[0].unsqueeze(0), emb_weight[self.tuneable_vector_count:]])
+        # tuneable_weights = emb_weight[:self.tuneable_vector_count]
+        # frozen_weights = torch.cat([emb_weight[0].unsqueeze(0), emb_weight[self.tuneable_vector_count:]])
 
-        self.tuneable_embeddings = nn.Embedding.from_pretrained(tuneable_weights, freeze=False)
-        self.frozen_embeddings = nn.Embedding.from_pretrained(frozen_weights, freeze=True)
+        # self.tuneable_embeddings = nn.Embedding.from_pretrained(tuneable_weights, freeze=False)
+        # self.frozen_embeddings = nn.Embedding.from_pretrained(frozen_weights, freeze=True)
 
         self.embeddings = nn.Embedding.from_pretrained(emb_weight, freeze=False, padding_idx=self.padding_idx)
         self.encoding_bilstm = nn.LSTM(self.emb_dim, self.hidden_dim, num_layers=n_layers,
                                        bidirectional=True, batch_first=True)
         
         self.attention_matrix = nn.Linear(self.encoding_dim, self.encoding_dim)
-        nn.init.xavier_uniform_(self.attention_matrix.weight)
         self.attention_activation = nn.Tanh()
         self.attention_vector = nn.Linear(self.encoding_dim, 1, bias=False)
-        nn.init.kaiming_uniform_(self.attention_vector.weight, mode='fan_in')
         self.attn_softmax = nn.Softmax(dim=2)
+        nn.init.xavier_uniform_(self.attention_matrix.weight)
+        nn.init.constant_(self.attention_matrix.bias, 0.)
+        nn.init.constant_(self.attention_vector.weight, 0.)
 
-        self.weight_linear_layer_1 = nn.Linear(self.encoding_dim, 256)
-        nn.init.kaiming_uniform_(self.weight_linear_layer_1.weight, a=0.01, mode='fan_in')
+        # self.weight_linear_layer_1 = nn.Linear(self.encoding_dim, 256)
+        # nn.init.kaiming_uniform_(self.weight_linear_layer_1.weight, a=0.01, mode='fan_in')
 
-        self.weight_linear_layer_2 = nn.Linear(256, 128)
-        nn.init.kaiming_uniform_(self.weight_linear_layer_2.weight, a=0.01, mode='fan_in')
+        # self.weight_linear_layer_2 = nn.Linear(256, 128)
+        # nn.init.kaiming_uniform_(self.weight_linear_layer_2.weight, a=0.01, mode='fan_in')
         
-        self.weight_linear_layer_3 = nn.Linear(128, 64)
-        nn.init.kaiming_uniform_(self.weight_linear_layer_3.weight, a=0.01, mode='fan_in')
+        # self.weight_linear_layer_3 = nn.Linear(128, 64)
+        # nn.init.kaiming_uniform_(self.weight_linear_layer_3.weight, a=0.01, mode='fan_in')
 
-        self.weight_final_layer = nn.Linear(64, self.number_of_classes)
+        self.weight_final_layer = nn.Linear(self.encoding_dim, self.number_of_classes, bias=False)
         nn.init.kaiming_uniform_(self.weight_final_layer.weight, a=0.01, mode='fan_in')
 
-        self.weight_activation_function = nn.LeakyReLU()
+        # self.weight_activation_function = nn.LeakyReLU()
 
-        self.embedding_dropout = nn.Dropout(p=0.2)
+        self.embedding_dropout = nn.Dropout(p=0.04)
         self.encoding_dropout = nn.Dropout(p=encoding_dropout)
-        self.mlp_dropout = nn.Dropout(p=0.1)
+        # self.mlp_dropout = nn.Dropout(p=0.2)
     
     def get_attention_weights(self, hidden_states, padding_indexes=None):
         """
@@ -117,27 +118,37 @@ class BiLSTM_Att_Clf(nn.Module):
         padding_indexes = seqs == self.padding_idx # N x seq_len
         padding_indexes = padding_indexes.float()
 
-        mask = seqs < self.tuneable_vector_count
+        final_embeddings = self.embeddings(seqs)
 
-        # You may want to optimize it, you could probably get away without copy, though
-        # I'm not currently sure how
-        seqs_copy = seqs.clone().detach()
-        # Subtracting token ids by constant
-        seqs_copy -= (self.tuneable_vector_count - 1)
-        seqs_copy[mask] = 0
+        # fixed_tokens = (seqs >= self.tuneable_vector_count).to(dtype=torch.int64) * (seqs - (self.tuneable_vector_count - 1))
+        # trainable_mask = (seqs < self.tuneable_vector_count).to(dtype=torch.int64)
+        # trainable_indices = trainable_mask * seqs
 
-        frozen_embs = self.frozen_embeddings(seqs_copy)
+        # fixed_emb = self.frozen_embeddings(fixed_tokens)
+        # trainable_mask = torch.unsqueeze(trainable_mask, dim=-1)
+        # trainable_emb = self.tuneable_embeddings(trainable_indices)*trainable_mask.to(dtype=torch.float32)
+
+        # final_embeddings = trainable_emb + fixed_emb
+
+        # # You may want to optimize it, you could probably get away without copy, though
+        # # I'm not currently sure how
+        # seqs_copy = seqs.clone().detach()
+        # # Subtracting token ids by constant
+        # seqs_copy -= (self.tuneable_vector_count - 1)
+        # seqs_copy[mask] = 0
+
+        # frozen_embs = self.frozen_embeddings(seqs_copy)
     
-        seqs[~mask] = 0
-        seq_embs = self.tuneable_embeddings(seqs)
+        # seqs[~mask] = 0
+        # seq_embs = self.tuneable_embeddings(seqs)
 
-        # And finally change appropriate tokens from placeholder embedding created by
-        # pretrained into trainable embeddings.
-        seq_embs[~mask] = frozen_embs[~mask] # seq_embs = N x seq_len x embedding_dim
+        # # And finally change appropriate tokens from placeholder embedding created by
+        # # pretrained into trainable embeddings.
+        # seq_embs[~mask] = frozen_embs[~mask] # seq_embs = N x seq_len x embedding_dim
                 
-        return seq_embs, padding_indexes
+        return final_embeddings, padding_indexes
     
-    def encode_tokens(self, seqs):
+    def encode_tokens(self, seqs, seq_lengths, h0, c0):
         """
             Create raw encodings for a sequence of tokens
             Arguments:
@@ -148,7 +159,9 @@ class BiLSTM_Att_Clf(nn.Module):
         """
         seq_embs, padding_indexes = self.get_embeddings(seqs) # N x seq_len x embedding_dim, N, seq_len
         seq_embs = self.embedding_dropout(seq_embs)
-        seq_encodings, _ = self.encoding_bilstm(seq_embs) # N x seq_len, encoding_dim
+        seq_embs = nn.utils.rnn.pack_padded_sequence(seq_embs, seq_lengths, enforce_sorted=False, batch_first=True)
+        seq_encodings, _ = self.encoding_bilstm(seq_embs, (h0,c0)) # N x seq_len, encoding_dim
+        seq_encodings, _ = nn.utils.rnn.pad_packed_sequence(seq_encodings, batch_first=True)
         seq_encodings = self.encoding_dropout(seq_encodings)
         
         return seq_encodings, padding_indexes
@@ -162,29 +175,29 @@ class BiLSTM_Att_Clf(nn.Module):
             Returns:
                 (torch.tensor) : N x number_of_classes
         """
-        compressed_vector = self.mlp_dropout(pooled_vectors)
+        # compressed_vector = self.mlp_dropout(pooled_vectors)
 
-        compressed_vector = self.weight_linear_layer_1(compressed_vector)
-        compressed_vector = self.weight_activation_function(compressed_vector)
+        # compressed_vector = self.weight_linear_layer_1(pooled_vectors)
+        # compressed_vector = self.weight_activation_function(compressed_vector)
         
-        compressed_vector = self.mlp_dropout(compressed_vector)
+        # compressed_vector = self.mlp_dropout(compressed_vector)
 
-        compressed_vector = self.weight_linear_layer_2(compressed_vector)
-        compressed_vector = self.weight_activation_function(compressed_vector)
+        # compressed_vector = self.weight_linear_layer_2(compressed_vector)
+        # compressed_vector = self.weight_activation_function(compressed_vector)
 
-        compressed_vector = self.mlp_dropout(compressed_vector)
+        # compressed_vector = self.mlp_dropout(compressed_vector)
 
-        compressed_vector = self.weight_linear_layer_3(compressed_vector) # N x 64
-        compressed_vector = self.weight_activation_function(compressed_vector)
+        # compressed_vector = self.weight_linear_layer_3(compressed_vector) # N x 64
+        # compressed_vector = self.weight_activation_function(compressed_vector)
 
-        compressed_vector = self.mlp_dropout(compressed_vector)
+        # compressed_vector = self.mlp_dropout(compressed_vector)
             
-        classification_scores = self.weight_final_layer(compressed_vector) # N x number_of_classes
+        classification_scores = self.weight_final_layer(pooled_vectors) # N x number_of_classes
 
         return classification_scores
 
-    def forward(self, seqs):
-        seq_encodings, padding_indexes = self.encode_tokens(seqs) # N x seq_len x encoding_dim, N x seq_len
+    def forward(self, seqs, seq_lengths, h0, c0):
+        seq_encodings, padding_indexes = self.encode_tokens(seqs, seq_lengths,  h0, c0) # N x seq_len x encoding_dim, N x seq_len
         pooled_encodings = self.attention_pooling(seq_encodings, padding_indexes).squeeze(1) # N x encoding_dim
         classification_scores = self.classification_head(pooled_encodings)
 
