@@ -146,6 +146,8 @@ def main():
     best_test_f1_score = -1
     best_dev_f1_score = -1
 
+    strict_loss_epoch = []
+
     if args.load_clf_model:
         clf.load_state_dict(torch.load("../data/saved_models/Clf_{}.p".format(args.experiment_name)))
         print("loaded model")
@@ -173,7 +175,7 @@ def main():
     if args.use_adagrad:
         optimizer = Adagrad(clf.parameters(), lr=args.learning_rate)
     else:
-        optimizer = AdamW(clf.parameters(), lr=args.learning_rate, weight_decay=0.05)
+        optimizer = AdamW(clf.parameters(), lr=args.learning_rate, weight_decay=0.5)
     
     # define loss functions
     strict_match_loss_function  = nn.CrossEntropyLoss()
@@ -215,6 +217,8 @@ def main():
         print("Train Losses")
         loss_tuples = ("%.5f" % train_avg_loss, "%.5f" % train_avg_strict_loss, "%.5f" % train_avg_soft_loss, "%.5f" % train_avg_sim_loss)
         print("Avg Train Total Loss: {}, Avg Train Strict Loss: {}, Avg Train Soft Loss: {}, Avg Train Sim Loss: {}".format(*loss_tuples))
+
+        strict_loss_epoch.append(train_avg_strict_loss)
 
         if args.no_thresholds:
             no_relation_key = ""
@@ -273,6 +277,12 @@ def main():
         print("Best Test F1: {}".format("%.5f" % best_test_f1_score))
         print(test_epoch_f1_scores[-3:])
     
+    with open("../data/result_data/train_strict_loss_per_epoch_Clf_{}.csv".format(args.experiment_name), "w") as f:
+        writer=csv.writer(f)
+        writer.writerow(['train loss'])
+        for row in strict_loss_epoch:
+            writer.writerow(row)
+
     with open("../data/result_data/dev_f1_per_epoch_Clf_{}.csv".format(args.experiment_name), "w") as f:
         writer=csv.writer(f)
         writer.writerow(['entropy_f1_score','max_value_f1_score', 'max'])
