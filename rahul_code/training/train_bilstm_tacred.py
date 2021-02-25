@@ -78,7 +78,7 @@ def main():
                         help="embedding vector size")
     parser.add_argument('--hidden_dim',
                         type=int,
-                        default=100,
+                        default=200,
                         help="hidden vector size of lstm (really 2*hidden_dim, due to bilstm)")
     parser.add_argument('--model_save_dir',
                         type=str,
@@ -173,7 +173,7 @@ def main():
     if args.use_adagrad:
         optimizer = Adagrad(clf.parameters(), lr=args.learning_rate)
     else:
-        optimizer = AdamW(clf.parameters(), lr=args.learning_rate)
+        optimizer = AdamW(clf.parameters(), lr=args.learning_rate, weight_decay=0.05)
     
     # define loss functions
     strict_match_loss_function  = nn.CrossEntropyLoss()
@@ -202,7 +202,7 @@ def main():
                 print((total_loss, strict_total_loss, soft_total_loss, sim_total_loss,  batch_count))
             
             strict_match_loss.backward()
-            torch.nn.utils.clip_grad_norm_(clf.parameters(), 5.0)
+            torch.nn.utils.clip_grad_norm_(clf.parameters(), 1.0)
 
             optimizer.step()
 

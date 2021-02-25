@@ -4,7 +4,7 @@ import torch.nn.functional as f
 
 class BiLSTM_Att_Clf(nn.Module):
     def __init__(self, emb_weight, padding_idx, emb_dim, hidden_dim, cuda, number_of_classes, tuneable_vector_count,
-                 n_layers=2, encoding_dropout=0.5, padding_score=-1e30):
+                 n_layers=2, encoding_dropout=0.4, padding_score=-1e30):
         """
             Arguments:
                 emb_weight (torch.tensor) : created vocabulary's vector representation for each token, where
@@ -49,7 +49,10 @@ class BiLSTM_Att_Clf(nn.Module):
         nn.init.kaiming_uniform_(self.attention_vector.weight, mode='fan_in')
         self.attn_softmax = nn.Softmax(dim=2)
 
-        self.weight_linear_layer_2 = nn.Linear(self.encoding_dim, 128)
+        self.weight_linear_layer_1 = nn.Linear(self.encoding_dim, 256)
+        nn.init.kaiming_uniform_(self.weight_linear_layer_1.weight, a=0.01, mode='fan_in')
+
+        self.weight_linear_layer_2 = nn.Linear(256, 128)
         nn.init.kaiming_uniform_(self.weight_linear_layer_2.weight, a=0.01, mode='fan_in')
         
         self.weight_linear_layer_3 = nn.Linear(128, 64)
@@ -60,20 +63,18 @@ class BiLSTM_Att_Clf(nn.Module):
 
         self.weight_activation_function = nn.LeakyReLU()
 
-        self.embedding_dropout = nn.Dropout(p=0.04)
+        self.embedding_dropout = nn.Dropout(p=0.2)
         self.encoding_dropout = nn.Dropout(p=encoding_dropout)
-        self.mlp_dropout = nn.Dropout(p=0.2)
+        self.mlp_dropout = nn.Dropout(p=0.1)
     
     def get_attention_weights(self, hidden_states, padding_indexes=None):
         """
             Calculates attention weights for each token in each sequence passed in
                 * heavily discounts the importance of padding_tokens, when indices representing which
                   tokens are padding and which aren't
-
             Arguments:
                 hidden_states   (torch.tensor) : N x seq_len x encoding_dim
                 padding_indexes (torch.tensor) : N x seq_len
-
             Returns:
                 (torch.tensor) : N x 1 x seq_len
         """
@@ -155,14 +156,20 @@ class BiLSTM_Att_Clf(nn.Module):
     def classification_head(self, pooled_vectors):
         """
             MLP head on top of encoded representation to be classified
-
             Arguments:
                 pooled_vectors (torch.tensor) : N x encoding_dim
             
             Returns:
                 (torch.tensor) : N x number_of_classes
-        """        
-        compressed_vector = self.weight_linear_layer_2(pooled_vectors)
+        """
+        compressed_vector = self.mlp_dropout(pooled_vectors)
+
+        compressed_vector = self.weight_linear_layer_1(compressed_vector)
+        compressed_vector = self.weight_activation_function(compressed_vector)
+        
+        compressed_vector = self.mlp_dropout(compressed_vector)
+
+        compressed_vector = self.weight_linear_layer_2(compressed_vector)
         compressed_vector = self.weight_activation_function(compressed_vector)
 
         compressed_vector = self.mlp_dropout(compressed_vector)
@@ -182,9 +189,3 @@ class BiLSTM_Att_Clf(nn.Module):
         classification_scores = self.classification_head(pooled_encodings)
 
         return classification_scores # N x number_of_classes
-
-
-
-
-
-    
