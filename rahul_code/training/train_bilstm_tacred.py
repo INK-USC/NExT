@@ -175,7 +175,7 @@ def main():
     if args.use_adagrad:
         optimizer = Adagrad(clf.parameters(), lr=args.learning_rate)
     else:
-        optimizer = AdamW(clf.parameters(), lr=args.learning_rate, weight_decay=0.5)
+        optimizer = AdamW(clf.parameters(), lr=args.learning_rate)
     
     # define loss functions
     strict_match_loss_function  = nn.CrossEntropyLoss()
