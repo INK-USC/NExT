@@ -3,9 +3,23 @@ from torchtext.data import Field, Example, Dataset
 import pickle
 import re
 import torch
-
+import collections
+from training.constants import TACRED_NERS
 
 nlp = spacy.load("en_core_web_sm")
+
+def build_custom_vocab(dataset, vocab_length):
+    custom_vocab = {}
+    
+    if dataset == "tacred":
+        cur_key = vocab_length
+        for key in TACRED_NERS:
+            custom_vocab["SUBJ-{}".format(key)] = cur_key
+            cur_key += 1
+            custom_vocab["OBJ-{}".format(key)] = cur_key
+            cur_key += 1
+        
+    return custom_vocab
 
 def find_array_start_position(big_array, small_array):
     """
@@ -47,7 +61,6 @@ def generate_save_string(embedding_name, random_state=-1, sample=-1.0):
 
 def clean_text(text):
     text = text.strip()
-    text = text.lower()
     text = text.replace('\n', '')
 
     return text
@@ -64,8 +77,41 @@ def tokenize(sentence, tokenizer=nlp):
         Returns:
             arr : list of tokens
     """
+
+    sbj_replacement = None
+    obj_replacement = None
+
+    if "SUBJ-" in sentence and "OBJ-" in sentence:
+        sbj_replacement = re.search(r"SUBJ-[A-Z_'s,]+", sentence).group(0).strip()
+        sbj_replacement = sbj_replacement.replace("'s", "")
+        sbj_replacement = sbj_replacement.replace(",", "")
+        obj_replacement = re.search(r"OBJ-[A-Z_'s,]+", sentence).group(0).strip()
+        obj_replacement = obj_replacement.replace("'s", "")
+        obj_replacement = obj_replacement.replace(",", "")
+        sentence = re.sub(r"SUBJ-[A-Z_]+", "SUBJ", sentence)
+        sentence = re.sub(r"SUBJ-[A-Z_'s]+", "SUBJ's", sentence)
+        sentence = re.sub(r"SUBJ-[A-Z_]+,", "SUBJ,", sentence)
+        sentence = re.sub(r"OBJ-[A-Z_]+", "OBJ", sentence)
+        sentence = re.sub(r"OBJ-[A-Z_'s]+", "OBJ's ", sentence)
+        sentence = re.sub(r"OBJ-[A-Z_]+,", "OBJ,", sentence)
+    elif "SUBJ" in sentence and "OBJ" in sentence:
+        print(sentence)
+    
     sentence = clean_text(sentence)
-    return [tok.text for tok in tokenizer.tokenizer(sentence)]
+
+    spacy_tokens = [tok.text for tok in tokenizer.tokenizer(sentence)]
+
+    if sbj_replacement != None:
+        sbj_index = spacy_tokens.index("SUBJ")
+        assert sbj_index > -1
+        spacy_tokens[sbj_index] = sbj_replacement
+    if obj_replacement != None:
+        obj_index = spacy_tokens.index("OBJ")
+        assert obj_index > -1
+        spacy_tokens[obj_index] = obj_replacement
+    
+    return spacy_tokens
+
 
 def build_vocab(train, embedding_name, save_string="", save=True):
     """
@@ -102,28 +148,28 @@ def build_vocab(train, embedding_name, save_string="", save=True):
     print("Finished building vocab of size {}".format(str(len(vocab))))
 
     if save:
-        file_name = "../data/pre_train_data/vocab_{}.p".format(save_string)
+        file_name = "../data/vocabs/vocab_{}.p".format(save_string)
 
         with open(file_name, "wb") as f:
             pickle.dump(vocab, f)
 
     return vocab
 
-def convert_text_to_tokens(data, vocab, tokenize_fn):
+def convert_text_to_tokens(data, base_vocab, tokenize_fn, custom_vocab={}):
     """
         Converts sequences of text to sequences of token ids per the provided vocabulary
 
         Arguments:
-            data              (arr) : sequences of text
-            vocab (torchtext.vocab) : vocabulary object
-            tokenize_fun (function) : function to use to break up text into tokens
+            data                   (arr) : sequences of text
+            base_vocab (torchtext.vocab) : vocabulary object
+            tokenize_fun      (function) : function to use to break up text into tokens
 
         Returns:
             arr : array of arrays, each inner array is a token_id representation of the text passed in
 
     """
     word_seqs = [tokenize_fn(seq) for seq in data]
-    token_seqs = [[vocab[word] for word in word_seq] for word_seq in word_seqs]
+    token_seqs = [[custom_vocab[word] if word in custom_vocab else base_vocab[word] for word in word_seq] for word_seq in word_seqs]
 
     return token_seqs
 

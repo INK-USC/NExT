@@ -389,6 +389,7 @@ class CCGParserTrainer():
             self.parser.build_soft_labeling_functions()
             if verbose:
                 print("Parser: Built soft labeling functions")
+        print("Parser: Done")
     
     def get_parser(self):
         return self.parser

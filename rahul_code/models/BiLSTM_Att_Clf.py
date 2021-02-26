@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as f
 
 class BiLSTM_Att_Clf(nn.Module):
-    def __init__(self, emb_weight, padding_idx, emb_dim, hidden_dim, cuda, number_of_classes, tuneable_vector_count=None,
+    def __init__(self, emb_weight, padding_idx, emb_dim, hidden_dim, cuda, number_of_classes, custom_token_count=0,
                  n_layers=2, encoding_dropout=0.5, padding_score=-1e30):
         """
             Arguments:
@@ -30,15 +30,19 @@ class BiLSTM_Att_Clf(nn.Module):
         self.hidden_dim = hidden_dim
         self.encoding_dim = 2*hidden_dim
         self.number_of_classes = number_of_classes
-        self.tuneable_vector_count = tuneable_vector_count
+        self.custom_token_count = custom_token_count
 
-        tuneable_weights = emb_weight[:self.tuneable_vector_count]
-        frozen_weights = torch.cat([emb_weight[0].unsqueeze(0), emb_weight[self.tuneable_vector_count:]])
+        if self.custom_token_count:
+            custom_vocab_embeddings = nn.init.normal_(torch.empty(self.custom_token_count, self.emb_dim), -1., 1.0)
+            emb_weight = torch.cat([emb_weight, custom_vocab_embeddings])
 
-        self.tuneable_embeddings = nn.Embedding.from_pretrained(tuneable_weights, freeze=False, padding_idx=self.padding_idx)
-        self.frozen_embeddings = nn.Embedding.from_pretrained(frozen_weights, freeze=True, padding_idx=self.padding_idx)
+        # tuneable_weights = emb_weight[:self.tuneable_vector_count]
+        # frozen_weights = torch.cat([emb_weight[0].unsqueeze(0), emb_weight[self.tuneable_vector_count:]])
 
-        # self.embeddings = nn.Embedding.from_pretrained(emb_weight, freeze=False, padding_idx=self.padding_idx)
+        # self.tuneable_embeddings = nn.Embedding.from_pretrained(tuneable_weights, freeze=False, padding_idx=self.padding_idx)
+        # self.frozen_embeddings = nn.Embedding.from_pretrained(frozen_weights, freeze=True, padding_idx=self.padding_idx)
+
+        self.embeddings = nn.Embedding.from_pretrained(emb_weight, freeze=False, padding_idx=self.padding_idx)
         self.encoding_bilstm = nn.LSTM(self.emb_dim, self.hidden_dim, num_layers=n_layers,
                                        bidirectional=True, batch_first=True)
         
@@ -60,13 +64,13 @@ class BiLSTM_Att_Clf(nn.Module):
         # nn.init.kaiming_uniform_(self.weight_linear_layer_3.weight, a=0.01, mode='fan_in')
 
         self.weight_final_layer = nn.Linear(self.encoding_dim, self.number_of_classes, bias=False)
-        nn.init.kaiming_uniform_(self.weight_final_layer.weight, a=0.01, mode='fan_in')
+        # nn.init.kaiming_uniform_(self.weight_final_layer.weight, a=0.01, mode='fan_in')
 
         # self.weight_activation_function = nn.LeakyReLU()
 
         self.embedding_dropout = nn.Dropout(p=0.04)
         self.encoding_dropout = nn.Dropout(p=encoding_dropout)
-        # self.mlp_dropout = nn.Dropout(p=0.2)
+        # self.mlp_dropout = nn.Dropout(p=encoding_dropout)
     
     def get_attention_weights(self, hidden_states, padding_indexes=None):
         """
@@ -118,17 +122,17 @@ class BiLSTM_Att_Clf(nn.Module):
         padding_indexes = seqs == self.padding_idx # N x seq_len
         padding_indexes = padding_indexes.float()
 
-        # final_embeddings = self.embeddings(seqs)
+        seq_embs = self.embeddings(seqs)
 
-        fixed_tokens = (seqs >= self.tuneable_vector_count).to(dtype=torch.int64) * (seqs - (self.tuneable_vector_count - 1))
-        trainable_mask = (seqs < self.tuneable_vector_count).to(dtype=torch.int64)
-        trainable_indices = trainable_mask * seqs
+        # fixed_tokens = (seqs >= self.tuneable_vector_count).to(dtype=torch.int64) * (seqs - (self.tuneable_vector_count - 1))
+        # trainable_mask = (seqs < self.tuneable_vector_count).to(dtype=torch.int64)
+        # trainable_indices = trainable_mask * seqs
 
-        fixed_emb = self.frozen_embeddings(fixed_tokens)
-        trainable_mask = torch.unsqueeze(trainable_mask, dim=-1)
-        trainable_emb = self.tuneable_embeddings(trainable_indices)*trainable_mask.to(dtype=torch.float32)
+        # fixed_emb = self.frozen_embeddings(fixed_tokens)
+        # trainable_mask = torch.unsqueeze(trainable_mask, dim=-1)
+        # trainable_emb = self.tuneable_embeddings(trainable_indices)*trainable_mask.to(dtype=torch.float32)
 
-        final_embeddings = trainable_emb + fixed_emb
+        # final_embeddings = trainable_emb + fixed_emb
 
         # # You may want to optimize it, you could probably get away without copy, though
         # # I'm not currently sure how
@@ -146,7 +150,7 @@ class BiLSTM_Att_Clf(nn.Module):
         # # pretrained into trainable embeddings.
         # seq_embs[~mask] = frozen_embs[~mask] # seq_embs = N x seq_len x embedding_dim
                 
-        return final_embeddings, padding_indexes
+        return seq_embs, padding_indexes
     
     def encode_tokens(self, seqs, seq_lengths, h0, c0):
         """
@@ -182,7 +186,7 @@ class BiLSTM_Att_Clf(nn.Module):
         
         # compressed_vector = self.mlp_dropout(compressed_vector)
 
-        # compressed_vector = self.weight_linear_layer_2(compressed_vector)
+        # compressed_vector = self.weight_linear_layer_2(pooled_vectors)
         # compressed_vector = self.weight_activation_function(compressed_vector)
 
         # compressed_vector = self.mlp_dropout(compressed_vector)

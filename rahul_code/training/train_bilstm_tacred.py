@@ -5,7 +5,8 @@ import sys
 sys.path.append(".")
 sys.path.append("../")
 from training.train_util_functions import batch_type_restrict, build_phrase_input, build_mask_mat_for_batch,\
-                                   set_tacred_ner_label_space, build_datasets_from_splits, evaluate_next_clf
+                                   set_tacred_ner_label_space, build_datasets_from_splits, evaluate_next_clf,\
+                                   build_custom_vocab
 from training.util_functions import similarity_loss_function, generate_save_string
 from training.util_classes import BaseVariableLengthDataset
 from training.constants import TACRED_LABEL_MAP, FIND_MODULE_HIDDEN_DIM
@@ -18,6 +19,7 @@ import argparse
 import random
 import csv
 import dill
+import pdb
 
 def main():
     parser = argparse.ArgumentParser()
@@ -42,14 +44,14 @@ def main():
                         help="Path to explanation data.")
     parser.add_argument("--vocab_path",
                         type=str,
-                        default="../data/pre_train_data/vocab_glove.840B.300d_-1_0.6.p",
+                        default="../data/vocabs/vocab_glove.840B.300d_-1_0.6.p",
                         help="Path to vocab created in Pre-training")
     parser.add_argument("--match_batch_size",
                         default=50,
                         type=int,
                         help="Match batch size for train.")
     parser.add_argument("--unlabeled_batch_size",
-                        default=128,
+                        default=100,
                         type=int,
                         help="Unlabeled batch size for train.")
     parser.add_argument("--eval_batch_size",
@@ -61,7 +63,7 @@ def main():
                         type=float,
                         help="The initial learning rate for Adam.")
     parser.add_argument("--epochs",
-                        default=20,
+                        default=50,
                         type=int,
                         help="Number of Epochs for training")
     parser.add_argument('--embeddings',
@@ -97,8 +99,6 @@ def main():
     parser.add_argument('--use_adagrad',
                         action='store_true',
                         help="use adagrad optimizer")
-    parser.add_argument('--no_thresholds',
-                        action='store_true')
     
     args = parser.parse_args()
 
@@ -116,13 +116,14 @@ def main():
         number_of_classes = len(TACRED_LABEL_MAP)
 
     if args.build_data:
-       build_datasets_from_splits(args.train_path, args.dev_path, args.test_path, args.vocab_path,
+        vocab_ = {"embedding_name" : args.embeddings, "save_string" : "bilstm"}
+        build_datasets_from_splits(args.train_path, args.dev_path, args.test_path, vocab_,
                                   args.explanation_data_path, save_string, dataset=dataset)
     
     with open("../data/training_data/{}_data_{}.p".format("matched", save_string), "rb") as f:
         strict_match_data = pickle.load(f)
     
-    with open(args.vocab_path, "rb") as f:
+    with open("../data/pre_train_data/vocab_bilstm.p", "rb") as f:
         vocab = pickle.load(f)
      
     dev_path = "../data/training_data/dev_data_{}.p".format(save_string)
@@ -134,9 +135,12 @@ def main():
         device = torch.device("cuda")
     else:
         device = torch.device("cpu")
+    
+    tacred_vocab = build_custom_vocab("tacred", len(vocab))
+    custom_vocab_length = len(tacred_vocab)
 
     clf = BiLSTM_Att_Clf.BiLSTM_Att_Clf(vocab.vectors, pad_idx, args.emb_dim, args.hidden_dim,
-                                        torch.cuda.is_available(), number_of_classes)
+                                        torch.cuda.is_available(), number_of_classes, custom_token_count=custom_vocab_length)
     
     del vocab
 
@@ -229,10 +233,7 @@ def main():
 
         strict_loss_epoch.append(train_avg_strict_loss)
 
-        if args.no_thresholds:
-            no_relation_key = ""
-        else:
-            no_relation_key = "no_relation"
+        no_relation_key = "no_relation"
         
         train_path = "../data/training_data/{}_data_{}.p".format("matched", save_string)
         train_results = evaluate_next_clf(train_path, clf, strict_match_loss_function, TACRED_LABEL_MAP, batch_size=args.eval_batch_size, no_relation_key=no_relation_key)

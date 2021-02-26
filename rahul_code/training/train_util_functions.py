@@ -1,7 +1,7 @@
 import pickle
 import json
 import random
-from training.util_functions import generate_save_string, convert_text_to_tokens, tokenize, extract_queries_from_explanations, clean_text
+from training.util_functions import generate_save_string, convert_text_to_tokens, tokenize, extract_queries_from_explanations, clean_text, build_vocab, build_custom_vocab
 from training.constants import SPACY_NERS, SPACY_TO_TACRED, TACRED_NERS, TACRED_ENTITY_TYPES, PARSER_TRAIN_SAMPLE, UNMATCH_TYPE_SCORE, TACRED_LABEL_MAP, DEV_F1_SAMPLE
 from training.util_classes import BaseVariableLengthDataset, UnlabeledTrainingDataset, TrainingDataset
 import sys
@@ -83,17 +83,25 @@ def _prepare_labels(labels, dataset="tacred"):
             converted_labels.append(TACRED_LABEL_MAP[label])
     return converted_labels
 
-def _prepare_unlabeled_data(unlabeled_data_phrases, vocab):
+def _prepare_unlabeled_data(unlabeled_data_phrases, vocab, custom_vocab={}):
     seq_tokens = []
     seq_phrases = []
     for phrase in unlabeled_data_phrases:
-        tokens = [token.lower() for token in phrase.tokens]
+        tokens = phrase.tokens
         ners = phrase.ners
+
+        if phrase.subj_posi != None:
+            tokens[phrase.subj_posi] = "SUBJ-{}".format(ners[phrase.subj_posi])
+        if phrase.obj_posi != None:
+            tokens[phrase.obj_posi] = "OBJ-{}".format(ners[phrase.obj_posi])
+
         ners = [SPACY_TO_TACRED[ner] if ner in SPACY_TO_TACRED else ner for ner in ners]
-        tokens = [vocab[token] for token in tokens]
+        
+        tokens = [custom_vocab[token] if token in custom_vocab else vocab[token] for token in tokens]
         ners = [NER_LABEL_SPACE[ner] for ner in ners]
+        
         seq_tokens.append(tokens)
-        phrase.update_tokens_and_ners(tokens, ners)
+        phrase.update_tokens_and_ners(tokens, ners) # its okay to update with custom vocab, hard-matching is done, now embeddings matter
         seq_phrases.append(phrase)
     
     return seq_tokens, seq_phrases
@@ -106,6 +114,7 @@ def set_tacred_ner_label_space():
     temp.append("<PAD>")
     set_ner_label_space(temp)
     set_ner_label_space(TACRED_NERS)
+
 
 def create_parser(parser_training_data, explanation_path, dataset="tacred"):
     parser_trainer = None
@@ -143,7 +152,9 @@ def match_training_data(labeling_functions, train, dataset, ner_types=None):
                         subj_type = phrase.ners[phrase.subj_posi].lower()
                         obj_type = phrase.ners[phrase.obj_posi].lower()
                         if ner_types[function][0] == subj_type and ner_types[function][1] == obj_type:
-                            matched_data_tuples.append((phrase.sentence, labeling_functions[function]))
+                            sentence = phrase.sentence.replace("SUBJ", "SUBJ-{}".format(phrase.ners[phrase.subj_posi]))
+                            sentence = sentence.replace("OBJ", "OBJ-{}".format(phrase.ners[phrase.obj_posi]))
+                            matched_data_tuples.append((sentence, labeling_functions[function]))
                             not_matched = False
                             break
                     else:
@@ -152,14 +163,15 @@ def match_training_data(labeling_functions, train, dataset, ner_types=None):
                         break
             except:
                 continue
-        if not_matched: 
+        if not_matched:
             unlabeled_data_phrases.append(phrase)
 
     return matched_data_tuples, unlabeled_data_phrases
 
-def build_unlabeled_dataset(unlabeled_data_phrases, vocab, save_string):
+def build_unlabeled_dataset(unlabeled_data_phrases, vocab, save_string, custom_vocab={}):
     pad_idx = vocab["<pad>"]
-    seq_tokens, seq_phrases = _prepare_unlabeled_data(unlabeled_data_phrases, vocab)
+    seq_tokens, seq_phrases = _prepare_unlabeled_data(unlabeled_data_phrases, vocab, custom_vocab)
+
     dataset = UnlabeledTrainingDataset(seq_tokens, seq_phrases, pad_idx)
 
     print("Finished building unlabeled dataset of size: {}".format(str(len(seq_tokens))))
@@ -169,10 +181,11 @@ def build_unlabeled_dataset(unlabeled_data_phrases, vocab, save_string):
     with open(file_name, "wb") as f:
         pickle.dump(dataset, f)
 
-def build_labeled_dataset(sentences, labels, vocab, save_string, split, dataset="tacred"):
+def build_labeled_dataset(sentences, labels, vocab, save_string, split, dataset="tacred", custom_vocab={}):
     pad_idx = vocab["<pad>"]
     sentences = [clean_text(sentence) for sentence in sentences]
-    seq_tokens = convert_text_to_tokens(sentences, vocab, tokenize)
+    seq_tokens = convert_text_to_tokens(sentences, vocab, tokenize, custom_vocab)
+    
     label_ids = _prepare_labels(labels, dataset)
 
     dataset = TrainingDataset(seq_tokens, label_ids, pad_idx)
@@ -209,15 +222,18 @@ def build_word_to_idx(raw_explanations, vocab, save_string):
     with open(file_name, "wb") as f:
         pickle.dump(quoted_words_to_index, f)
 
-def build_datasets_from_splits(train_path, dev_path, test_path, vocab_path, explanation_path, save_string,
+def build_datasets_from_splits(train_path, dev_path, test_path, vocab_, explanation_path, save_string,
                                label_filter=None, sample_rate=-1.0, dataset="tacred"):
     
     with open(train_path) as f:
         train = json.load(f)
         train = [entry["text"] for entry in train]
     
-    with open(vocab_path, "rb") as f:
-        vocab = pickle.load(f)
+    if type(vocab_) == str:
+        with open(vocab_, "rb") as f:
+            vocab = pickle.load(f)
+    else:
+        vocab = build_vocab(train, vocab_["embedding_name"], vocab_["save_string"])
 
     parser_training_data = random.sample(train, min(PARSER_TRAIN_SAMPLE, len(train)))
     
@@ -246,25 +262,27 @@ def build_datasets_from_splits(train_path, dev_path, test_path, vocab_path, expl
     # with open("unlabeled_data.p", "rb") as f:
     #     unlabeled_data_phrases = pickle.load(f)
     
-    build_unlabeled_dataset(unlabeled_data_phrases, vocab, save_string)
+    tacred_vocab = build_custom_vocab(dataset="tacred", vocab_length=len(vocab))
+
+    build_unlabeled_dataset(unlabeled_data_phrases, vocab, save_string, tacred_vocab)
 
     build_labeled_dataset([tup[0] for tup in matched_data_tuples], 
                           [tup[1] for tup in matched_data_tuples],
-                          vocab, save_string, "matched", dataset)
+                          vocab, save_string, "matched", dataset, tacred_vocab)
 
     with open(dev_path) as f:
         dev = json.load(f)
     
     build_labeled_dataset([ent["text"] for ent in dev], 
                           [ent["label"] for ent in dev],
-                          vocab, save_string, "dev", dataset)
+                          vocab, save_string, "dev", dataset, tacred_vocab)
     
     with open(test_path) as f:
         test = json.load(f)
     
     build_labeled_dataset([ent["text"] for ent in test], 
                           [ent["label"] for ent in test],
-                          vocab, save_string, "test", dataset)
+                          vocab, save_string, "test", dataset, tacred_vocab)
 
     filtered_raw_explanations = parser.filtered_raw_explanations
 

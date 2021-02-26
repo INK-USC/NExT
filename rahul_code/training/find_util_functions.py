@@ -1,3 +1,4 @@
+# FILE NEEDS TO BE UPDATED TO TAKE INTO ACCOUNT NEW TACRED STRATEGY
 import sys
 sys.path.append(".")
 sys.path.append("../")
@@ -19,7 +20,7 @@ possible_embeddings = ['charngram.100d', 'fasttext.en.300d', 'fasttext.simple.30
 'glove.840B.300d', 'glove.twitter.27B.25d', 'glove.twitter.27B.50d', 'glove.twitter.27B.100d',
 'glove.twitter.27B.200d', 'glove.6B.50d', 'glove.6B.100d', 'glove.6B.200d', 'glove.6B.300d']
 
-def build_synthetic_pretraining_triples(data, vocab, tokenize_fn, special_words={}):
+def build_synthetic_pretraining_triples(data, vocab, tokenize_fn, custom_vocab={}):
     """
         As per the NExT paper, we build a pre-training dataset from a dataset of unlabeled text.
         The process is as follows per sequence of text (Seq):
@@ -41,7 +42,10 @@ def build_synthetic_pretraining_triples(data, vocab, tokenize_fn, special_words=
             tokenized seqs, queries, labels : triplet where each element is a list of equal length
                                               containing the information described above
     """
-    token_seqs = convert_text_to_tokens(data, vocab, tokenize_fn, special_words)
+    if len(custom_vocab):
+        token_seqs = convert_text_to_tokens(data, vocab, tokenize_fn, custom_vocab)
+    else:
+        token_seqs = convert_text_to_tokens(data, vocab, tokenize_fn)
     token_seqs = [token_seq for token_seq in token_seqs if len(token_seq) > 3]
     queries = []
     labels = []
@@ -105,7 +109,7 @@ def build_real_pretraining_triples(sentences, queries, vocab, tokenize_fn, speci
 
     return tokenized_sentences, tokenized_queries, labels
 
-def build_variable_length_text_pre_training_dataset(data, vocab, split_name, save_string, special_words={}):
+def build_variable_length_text_pre_training_dataset(data, vocab, split_name, save_string, custom_vocab={}):
     """
         Given a split of data (train, dev, test) this function builds a PreTrainingFindModuleDataset and saves
         it to disk. A VariableLegnthTextDataset object handles batching sequences together and ensuring
@@ -118,7 +122,7 @@ def build_variable_length_text_pre_training_dataset(data, vocab, split_name, sav
             save_string       (str) : string to indicate some of the hyper-params used to create the vocab
     """
     pad_idx = vocab["<pad>"]
-    token_seqs, queries, labels = build_synthetic_pretraining_triples(data, vocab, tokenize, special_words)
+    token_seqs, queries, labels = build_synthetic_pretraining_triples(data, vocab, tokenize, custom_vocab)
     dataset = PreTrainingFindModuleDataset(token_seqs, queries, labels, pad_idx)
 
     print("Finished building {} dataset of size: {}".format(split_name, str(len(token_seqs))))
@@ -252,7 +256,7 @@ def build_pre_train_find_datasets(file_path, explanation_path, embedding_name="g
 
     save_string = generate_save_string(embedding_name, random_state=random_state, sample=sample_rate)
 
-    vocab = build_vocab(train, embedding_name, random_state, save_string)
+    vocab = build_vocab(train, embedding_name, save_string)
 
     build_variable_length_text_pre_training_dataset(train, vocab, "train", save_string)
 
@@ -300,11 +304,7 @@ def build_pre_train_find_datasets_from_splits(train_path, dev_path, test_path, e
 
     vocab = build_vocab(train, embedding_name, save_string)
 
-    special_words = {}
-    if dataset == "tacred":
-        subj_idx = len(vocab)
-        obj_idx = subj_idx + 1
-        special_words = {"subj" : subj_idx, "obj" : obj_idx}
+    tacred_vocab = build_custom_vocab(dataset="tacred", vocab_length=len(vocab))
 
     if train_sample:
         build_variable_length_text_pre_training_dataset(train_sample, vocab, "train", save_string, special_words)

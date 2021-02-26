@@ -51,26 +51,26 @@ def main():
                         help="Path to l_sim data for Find module")
     parser.add_argument("--vocab_path",
                         type=str,
-                        default="../data/pre_train_data/vocab_glove.840B.300d_-1_0.6.p",
+                        default="../data/vocabs/vocab_glove.840B.300d_-1_0.6.p",
                         help="Path to vocab created in Pre-training")
     parser.add_argument("--match_batch_size",
-                        default=64,
+                        default=50,
                         type=int,
                         help="Match batch size for train.")
     parser.add_argument("--unlabeled_batch_size",
-                        default=128,
+                        default=100,
                         type=int,
                         help="Unlabeled batch size for train.")
     parser.add_argument("--eval_batch_size",
-                        default=128,
+                        default=50,
                         type=int,
                         help="Total batch size for eval.")
     parser.add_argument("--learning_rate",
-                        default=0.001,
+                        default=0.1,
                         type=float,
-                        help="The initial learning rate for Adam.")
+                        help="The initial learning rate.")
     parser.add_argument("--epochs",
-                        default=20,
+                        default=50,
                         type=int,
                         help="Number of Epochs for training")
     parser.add_argument('--embeddings',
@@ -95,7 +95,7 @@ def main():
                         help="embedding vector size")
     parser.add_argument('--hidden_dim',
                         type=int,
-                        default=300,
+                        default=100,
                         help="hidden vector size of lstm (really 2*hidden_dim, due to bilstm)")
     parser.add_argument('--model_save_dir',
                         type=str,
@@ -114,9 +114,7 @@ def main():
     parser.add_argument('--use_adagrad',
                         action='store_true',
                         help="use adagrad optimizer")
-    parser.add_argument('--mlp_layer',
-                        type=int,
-                        default=3)
+
     
     args = parser.parse_args()
 
