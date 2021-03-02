@@ -6,7 +6,7 @@ sys.path.append(".")
 sys.path.append("../")
 from training.find_util_functions import build_pre_train_find_datasets_from_splits, \
                                          evaluate_find_module
-from training.util_functions import similarity_loss_function, generate_save_string
+from training.util_functions import similarity_loss_function, generate_save_string, build_custom_vocab
 from training.util_classes import BaseVariableLengthDataset
 from models import Find_Module
 import pickle
@@ -117,7 +117,7 @@ def main():
     # optional secondary eval, can set this to the empty string
     secondary_eval_path = "../data/pre_train_data/dev_data_{}.p".format(save_string)
     
-    with open("../data/pre_train_data/vocab_{}.p".format(save_string), "rb") as f:
+    with open("../data/vocabs/vocab_{}.p".format(save_string), "rb") as f:
         vocab = pickle.load(f)
     
     with open("../data/pre_train_data/sim_data_{}.p".format(save_string), "rb") as f:
@@ -129,9 +129,13 @@ def main():
         device = torch.device("cuda")
     else:
         device = torch.device("cpu")
+    
+    tacred_vocab = build_custom_vocab("tacred", len(vocab))
+    custom_vocab_length = len(tacred_vocab)
 
     model = Find_Module.Find_Module(emb_weight=vocab.vectors, padding_idx=pad_idx, emb_dim=args.emb_dim,
-                                      hidden_dim=args.hidden_dim, cuda=torch.cuda.is_available())
+                                    hidden_dim=args.hidden_dim, cuda=torch.cuda.is_available(),
+                                    custom_token_count=custom_vocab_length)
     del vocab
 
     # prepping variables for storing training progress
@@ -170,7 +174,7 @@ def main():
     model = model.to(device)
 
     # Get L_sim Data ready
-    real_query_tokens = BaseVariableLengthDataset.variable_length_batch_as_tensors(sim_data["queries"], pad_idx)
+    real_query_tokens, _ = BaseVariableLengthDataset.variable_length_batch_as_tensors(sim_data["queries"], pad_idx)
     real_query_tokens = real_query_tokens.to(device)
     query_labels = sim_data["labels"]
     

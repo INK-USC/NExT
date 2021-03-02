@@ -123,6 +123,7 @@ def main():
     with open("../data/training_data/{}_data_{}.p".format("matched", save_string), "rb") as f:
         strict_match_data = pickle.load(f)
     
+    # CHANGE THIS
     with open("../data/pre_train_data/vocab_bilstm.p", "rb") as f:
         vocab = pickle.load(f)
      

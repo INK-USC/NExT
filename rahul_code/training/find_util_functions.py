@@ -10,7 +10,8 @@ import random
 import pickle
 from training.util_classes import PreTrainingFindModuleDataset
 from training.util_functions import find_array_start_position, generate_save_string, tokenize,\
-                             build_vocab, convert_text_to_tokens, extract_queries_from_explanations
+                             build_vocab, convert_text_to_tokens, extract_queries_from_explanations,\
+                             build_custom_vocab
 from tqdm import tqdm
 import re
 import numpy as np
@@ -42,10 +43,7 @@ def build_synthetic_pretraining_triples(data, vocab, tokenize_fn, custom_vocab={
             tokenized seqs, queries, labels : triplet where each element is a list of equal length
                                               containing the information described above
     """
-    if len(custom_vocab):
-        token_seqs = convert_text_to_tokens(data, vocab, tokenize_fn, custom_vocab)
-    else:
-        token_seqs = convert_text_to_tokens(data, vocab, tokenize_fn)
+    token_seqs = convert_text_to_tokens(data, vocab, tokenize_fn, custom_vocab)
     token_seqs = [token_seq for token_seq in token_seqs if len(token_seq) > 3]
     queries = []
     labels = []
@@ -54,21 +52,17 @@ def build_synthetic_pretraining_triples(data, vocab, tokenize_fn, custom_vocab={
         starting_position = random.randint(0, len(token_seq)-num_tokens)
         end_position = starting_position + num_tokens
         queries.append(token_seq[starting_position:end_position])
-        # queries.append([vocab["<bos>"]] + token_seq[starting_position:end_position] + [vocab["<eos>"]])
-        # token_seqs[i] = [vocab["<bos>"]] + token_seq + [vocab["<eos>"]]
-        # label_seq = [0.0]
         label_seq = []
         for i in range(len(token_seq)):
             if i >= starting_position and i < end_position:
                 label_seq.append(1.0)
             else:
                 label_seq.append(0.0)
-        # label_seq.append(0.0)
         labels.append(label_seq)
     
     return token_seqs, queries, labels
 
-def build_real_pretraining_triples(sentences, queries, vocab, tokenize_fn, special_words={}):
+def build_real_pretraining_triples(sentences, queries, vocab, tokenize_fn, custom_vocab={}):
     """
         To evaluate a model against real explanations
 
@@ -82,21 +76,16 @@ def build_real_pretraining_triples(sentences, queries, vocab, tokenize_fn, speci
             tokenized seqs, queries, labels : triplet where each element is a list of equal length
                                               containing similar information to `build_synthetic_pretraining_triples`
     """
-    tokenized_sentences = convert_text_to_tokens(sentences, vocab, tokenize_fn, special_words)
+    tokenized_sentences = convert_text_to_tokens(sentences, vocab, tokenize_fn, custom_vocab)
     tokenized_queries = convert_text_to_tokens(queries, vocab, tokenize_fn)
     labels = []
     indices_to_delete = []
     for i, tokenized_sentence in enumerate(tokenized_sentences):
-        # tokenized_sentences[i] = [vocab["<bos>"]] + tokenized_sentence + [vocab["<eos>"]]
-        # padded_tokenized_sentence = tokenized_sentences[i]
         tokenized_query = tokenized_queries[i]
-        # sent_labels = [0] * len(padded_tokenized_sentence)
         sent_labels = [0] * len(tokenized_sentence)
-        # start_position = find_array_start_position(padded_tokenized_sentence, tokenized_query)
         start_position = find_array_start_position(tokenized_sentence, tokenized_query)
         if start_position > 0:
             sent_labels[start_position:start_position+len(tokenized_query)] = [1] * len(tokenized_query)
-            # tokenized_queries[i] = [vocab["<bos>"]] + tokenized_query + [vocab["<eos>"]]
             labels.append(sent_labels)
         else:
             indices_to_delete.append(i)
@@ -164,9 +153,6 @@ def build_query_dataset(explanation_data, vocab, label_filter, save_string):
 
     tokenized_queries = convert_text_to_tokens(queries, vocab, tokenize)
 
-    # for i, query in enumerate(tokenized_queries):
-    #     tokenized_queries[i] == [vocab["<bos>"]] + query + [vocab["<eos>"]]
-
     print("Finished tokenizing actual queries, count: {}".format(str(len(tokenized_queries))))
 
     file_name = "../data/pre_train_data/sim_data_{}.p".format(save_string)
@@ -174,7 +160,7 @@ def build_query_dataset(explanation_data, vocab, label_filter, save_string):
     with open(file_name, "wb") as f:
         pickle.dump({"queries" : tokenized_queries, "labels" : labels}, f)
 
-def build_real_query_dataset(explanation_data, vocab, label_filter, dataset_name, save_string, special_words={}):
+def build_real_query_dataset(explanation_data, vocab, label_filter, dataset_name, save_string, custom_vocab={}):
     """
         As an evaluation set, we take an real natural language explanation and check if it has a
         quoted phrase in it. If it does, then we build an evaluation based on the sentence the 
@@ -202,7 +188,7 @@ def build_real_query_dataset(explanation_data, vocab, label_filter, dataset_name
                 queries.append(query)
                 sentences.append(sentence)
     
-    output = build_real_pretraining_triples(sentences, queries, vocab, tokenize, special_words)
+    output = build_real_pretraining_triples(sentences, queries, vocab, tokenize, custom_vocab)
 
     tokenized_sentences, tokenized_queries, labels = output
     
@@ -307,28 +293,28 @@ def build_pre_train_find_datasets_from_splits(train_path, dev_path, test_path, e
     tacred_vocab = build_custom_vocab(dataset="tacred", vocab_length=len(vocab))
 
     if train_sample:
-        build_variable_length_text_pre_training_dataset(train_sample, vocab, "train", save_string, special_words)
+        build_variable_length_text_pre_training_dataset(train_sample, vocab, "train", save_string, tacred_vocab)
     else:
-        build_variable_length_text_pre_training_dataset(train, vocab, "train", save_string, special_words)
+        build_variable_length_text_pre_training_dataset(train, vocab, "train", save_string, tacred_vocab)
 
     with open(dev_path) as f:
         dev = json.load(f)
         dev = [ent["text"] for ent in dev]
 
-    build_variable_length_text_pre_training_dataset(dev, vocab, "dev", save_string, special_words)
+    build_variable_length_text_pre_training_dataset(dev, vocab, "dev", save_string, tacred_vocab)
 
     with open(test_path) as f:
         test = json.load(f)
         test = [ent["text"] for ent in test]
     
-    build_variable_length_text_pre_training_dataset(test, vocab, "test", save_string, special_words)
+    build_variable_length_text_pre_training_dataset(test, vocab, "test", save_string, tacred_vocab)
 
     with open(explanation_path) as f:
         explanation_data = json.load(f)
 
     build_query_dataset(explanation_data, vocab, label_filter, save_string)
 
-    build_real_query_dataset(explanation_data, vocab, label_filter, dataset, save_string, special_words)
+    build_real_query_dataset(explanation_data, vocab, label_filter, dataset, save_string, tacred_vocab)
 
 def build_pre_train_find_datasets_ziqi(train_path, explanation_path, embedding_name="glove.840B.300d",
                                        label_filter=None, train_count=40000, test_count=2000, dataset="tacred"):
