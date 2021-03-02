@@ -63,7 +63,7 @@ def main():
                         type=float,
                         help="The initial learning rate for Adam.")
     parser.add_argument("--epochs",
-                        default=50,
+                        default=60,
                         type=int,
                         help="Number of Epochs for training")
     parser.add_argument('--embeddings',
@@ -110,21 +110,16 @@ def main():
 
     if dataset == "tacred":
         set_tacred_ner_label_space()
-        # number_of_classes = len(TACRED_LABEL_MAP) - 1 # no relation isn't a predicted class
-        #                                               # no relation label shouldn't exist in training data
-        #                                               # can exist in dev and test (if those exist)
         number_of_classes = len(TACRED_LABEL_MAP)
 
     if args.build_data:
-        vocab_ = {"embedding_name" : args.embeddings, "save_string" : "bilstm"}
-        build_datasets_from_splits(args.train_path, args.dev_path, args.test_path, vocab_,
+        build_datasets_from_splits(args.train_path, args.dev_path, args.test_path, args.vocab_path,
                                   args.explanation_data_path, save_string, dataset=dataset)
     
     with open("../data/training_data/{}_data_{}.p".format("matched", save_string), "rb") as f:
         strict_match_data = pickle.load(f)
     
-    # CHANGE THIS
-    with open("../data/pre_train_data/vocab_bilstm.p", "rb") as f:
+    with open(args.vocab_path, "rb") as f:
         vocab = pickle.load(f)
      
     dev_path = "../data/training_data/dev_data_{}.p".format(save_string)

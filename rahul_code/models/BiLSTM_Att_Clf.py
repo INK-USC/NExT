@@ -48,18 +48,11 @@ class BiLSTM_Att_Clf(nn.Module):
         nn.init.constant_(self.attention_matrix.bias, 0.)
         nn.init.constant_(self.attention_vector.weight, 0.)
 
-        # self.weight_layer_1 = nn.Linear(self.encoding_dim, 128)
-        # nn.init.kaiming_uniform_(self.weight_layer_1.weight, a=0.01, mode='fan_in')
-
-        # self.weight_layer_2 = nn.Linear(128, 64)
-        # nn.init.kaiming_uniform_(self.weight_layer_2.weight, a=0.01, mode='fan_in')
-
         self.weight_final_layer = nn.Linear(self.encoding_dim, self.number_of_classes, bias=False)
         nn.init.kaiming_uniform_(self.weight_final_layer.weight, a=0.01, mode='fan_in')
 
         self.embedding_dropout = nn.Dropout(p=0.04)
         self.encoding_dropout = nn.Dropout(p=encoding_dropout)
-        # self.mlp_dropout = nn.Dropout(p=encoding_dropout)
     
     def get_attention_weights(self, hidden_states, padding_indexes=None):
         """
@@ -142,12 +135,6 @@ class BiLSTM_Att_Clf(nn.Module):
             Returns:
                 (torch.tensor) : N x number_of_classes
         """
-        # compressed_vectors = self.weight_layer_1(pooled_vectors)
-        # compressed_vectors = self.mlp_dropout(compressed_vectors)
-
-        # compressed_vectors = self.weight_layer_2(compressed_vectors)
-        # compressed_vectors = self.mlp_dropout(compressed_vectors)
-
         classification_scores = self.weight_final_layer(pooled_vectors) # N x number_of_classes
 
         return classification_scores

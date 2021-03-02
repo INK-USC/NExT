@@ -1,12 +1,12 @@
 from transformers import AdamW
-from torch.optim import Adagrad
+from torch.optim import Adagrad, SGD
 import torch
 import sys
 sys.path.append(".")
 sys.path.append("../")
 from training.train_util_functions import batch_type_restrict, build_phrase_input, build_mask_mat_for_batch,\
                                    set_tacred_ner_label_space, build_datasets_from_splits, evaluate_next_clf
-from training.util_functions import similarity_loss_function, generate_save_string
+from training.util_functions import similarity_loss_function, generate_save_string, build_custom_vocab
 from training.util_classes import BaseVariableLengthDataset
 from training.constants import TACRED_LABEL_MAP, FIND_MODULE_HIDDEN_DIM
 from models import BiLSTM_Att_Clf, Find_Module
@@ -45,10 +45,10 @@ def main():
                         type=str,
                         default="../data/saved_models/Find-Module-pt_official.p",
                         help="Path to pretrained find module")
-    parser.add_argument("--l_sim_data_path",
-                        type=str,
-                        default="../data/pre_train_data/sim_data_glove.840B.300d_-1_0.6.p",
-                        help="Path to l_sim data for Find module")
+    # parser.add_argument("--l_sim_data_path",
+    #                     type=str,
+    #                     default="../data/pre_train_data/sim_data_glove.840B.300d_-1_0.6.p",
+    #                     help="Path to l_sim data for Find module")
     parser.add_argument("--vocab_path",
                         type=str,
                         default="../data/vocabs/vocab_glove.840B.300d_-1_0.6.p",
@@ -70,7 +70,7 @@ def main():
                         type=float,
                         help="The initial learning rate.")
     parser.add_argument("--epochs",
-                        default=50,
+                        default=75,
                         type=int,
                         help="Number of Epochs for training")
     parser.add_argument('--embeddings',
@@ -126,9 +126,7 @@ def main():
 
     if dataset == "tacred":
         set_tacred_ner_label_space()
-        number_of_classes = len(TACRED_LABEL_MAP) - 1 # no relation isn't a predicted class
-                                                      # no relation label shouldn't exist in training data
-                                                      # can exist in dev and test (if those exist)
+        number_of_classes = len(TACRED_LABEL_MAP)
 
     if args.build_data:
        build_datasets_from_splits(args.train_path, args.dev_path, args.test_path, args.vocab_path,
@@ -137,7 +135,7 @@ def main():
     with open("../data/training_data/unlabeled_data_{}.p".format(save_string), "rb") as f:
         unlabeled_data = pickle.load(f)
     
-    with open("../data/training_data/{}_data_{}.p".format("matched", save_string), "rb") as f:
+    with open("../data/training_data/matched_data_{}.p".format(save_string), "rb") as f:
         strict_match_data = pickle.load(f)
     
     with open(args.vocab_path, "rb") as f:
@@ -165,13 +163,16 @@ def main():
     else:
         device = torch.device("cpu")
     
+    tacred_vocab = build_custom_vocab("tacred", len(vocab))
+    custom_vocab_length = len(tacred_vocab)
+    
     find_module = Find_Module.Find_Module(vocab.vectors, pad_idx, args.emb_dim, FIND_MODULE_HIDDEN_DIM,
-                                          torch.cuda.is_available())
+                                          torch.cuda.is_available(), custom_token_count=custom_vocab_length)
         
     find_module.load_state_dict(torch.load(args.find_module_path))
 
     clf = BiLSTM_Att_Clf.BiLSTM_Att_Clf(vocab.vectors, pad_idx, args.emb_dim, args.hidden_dim,
-                                        torch.cuda.is_available(), number_of_classes, mlp_layer=args.mlp_layer)
+                                        torch.cuda.is_available(), number_of_classes, custom_token_count=custom_vocab_length)
     
     del vocab
 
@@ -181,6 +182,8 @@ def main():
     dev_epoch_f1_scores = []
     best_test_f1_score = -1
     best_dev_f1_score = -1
+
+    loss_per_epoch = []
 
     if args.load_clf_model:
         clf.load_state_dict(torch.load("../data/saved_models/Next-Clf_{}.p".format(args.experiment_name)))
@@ -208,33 +211,33 @@ def main():
     find_module = find_module.to(device)
 
     # Get queries ready for Find Module
-    lfind_query_tokens = BaseVariableLengthDataset.variable_length_batch_as_tensors(tokenized_queries, pad_idx)
+    lfind_query_tokens, _ = BaseVariableLengthDataset.variable_length_batch_as_tensors(tokenized_queries, pad_idx)
     lfind_query_tokens = lfind_query_tokens.to(device).detach()
 
     # Get L_sim Data ready
-    lsim_query_tokens = BaseVariableLengthDataset.variable_length_batch_as_tensors(sim_data["queries"], pad_idx)
-    lsim_query_tokens = lsim_query_tokens.to(device)
-    query_labels = sim_data["labels"]
+    # lsim_query_tokens = BaseVariableLengthDataset.variable_length_batch_as_tensors(sim_data["queries"], pad_idx)
+    # lsim_query_tokens = lsim_query_tokens.to(device)
+    # query_labels = sim_data["labels"]
     
-    queries_by_label = {}
-    for i, label in enumerate(query_labels):
-        if label in queries_by_label:
-            queries_by_label[label][i] = 1
-        else:
-            queries_by_label[label] = [0] * len(query_labels)
-            queries_by_label[label][i] = 1
+    # queries_by_label = {}
+    # for i, label in enumerate(query_labels):
+    #     if label in queries_by_label:
+    #         queries_by_label[label][i] = 1
+    #     else:
+    #         queries_by_label[label] = [0] * len(query_labels)
+    #         queries_by_label[label][i] = 1
     
-    query_index_matrix = []
-    for i, label in enumerate(query_labels):
-        query_index_matrix.append(queries_by_label[label][:])
+    # query_index_matrix = []
+    # for i, label in enumerate(query_labels):
+    #     query_index_matrix.append(queries_by_label[label][:])
     
-    query_index_matrix = torch.tensor(query_index_matrix)
-    neg_query_index_matrix = 1 - query_index_matrix
-    for i, row in enumerate(neg_query_index_matrix):
-        neg_query_index_matrix[i][i] = 1
+    # query_index_matrix = torch.tensor(query_index_matrix)
+    # neg_query_index_matrix = 1 - query_index_matrix
+    # for i, row in enumerate(neg_query_index_matrix):
+    #     neg_query_index_matrix[i][i] = 1
 
-    query_index_matrix = query_index_matrix.to(device)
-    neg_query_index_matrix = neg_query_index_matrix.to(device)
+    # query_index_matrix = query_index_matrix.to(device)
+    # neg_query_index_matrix = neg_query_index_matrix.to(device)
 
     # Preping Soft Labeling Function Data
     soft_labeling_functions = soft_labeling_functions_dict["function_pairs"]
@@ -243,12 +246,22 @@ def main():
     if args.use_adagrad:
         optimizer = Adagrad(clf.parameters(), lr=args.learning_rate)
     else:
-        optimizer = AdamW(clf.parameters(), lr=args.learning_rate)
+        optimizer = SGD(clf.parameters(), lr=args.learning_rate)
+    
+    h0_hard = torch.empty(4, args.match_batch_size, args.hidden_dim).to(device)
+    c0_hard = torch.empty(4, args.match_batch_size, args.hidden_dim).to(device)
+    nn.init.xavier_normal_(h0_hard)
+    nn.init.xavier_normal_(c0_hard)
+
+    h0_soft = torch.empty(4, args.unlabeled_batch_size, args.hidden_dim).to(device)
+    c0_soft = torch.empty(4, args.unlabeled_batch_size, args.hidden_dim).to(device)
+    nn.init.xavier_normal_(h0_soft)
+    nn.init.xavier_normal_(c0_soft)
     
     # define loss functions
     strict_match_loss_function  = nn.CrossEntropyLoss()
     soft_match_loss_function = nn.CrossEntropyLoss(reduction='none')
-    sim_loss_function = similarity_loss_function
+    # sim_loss_function = similarity_loss_function
 
     for epoch in range(args.start_epoch, args.start_epoch+epochs):
         print('\n Epoch {:} / {:}'.format(epoch + 1, args.start_epoch+epochs))
@@ -259,15 +272,17 @@ def main():
         find_module.eval()
 
         for step, batch_pair in enumerate(tqdm(zip(strict_match_data.as_batches(batch_size=args.match_batch_size, seed=epoch),\
-                                                   unlabeled_data.as_batches(batch_size=args.unlabeled_batch_size)))):
+                                                   unlabeled_data.as_batches(batch_size=args.unlabeled_batch_size, seed=epoch)))):
             
             # prepping batch data
             strict_match_data_batch, unlabeled_data_batch = batch_pair
 
-            strict_match_data_batch = [r.to(device) for r in strict_match_data_batch]
-            strict_match_tokens, strict_match_labels  = strict_match_data_batch
+            strict_match_tokens, strict_match_lengths, strict_match_labels = strict_match_data_batch
 
-            unlabeled_tokens, phrases = unlabeled_data_batch
+            strict_match_tokens = strict_match_tokens.to(device)
+            strict_match_labels = strict_match_labels.to(device)
+
+            unlabeled_tokens, unlabeled_token_lengths, phrases = unlabeled_data_batch
             unlabeled_tokens = unlabeled_tokens.to(device)
 
             phrase_input = build_phrase_input(phrases, pad_idx).to(device).detach()
@@ -297,19 +312,19 @@ def main():
                 unlabeled_labels = torch.tensor([soft_labeling_function_labels[index] for index in unlabeled_label_index]).to(device).detach() # B
                 unlabeled_label_weights = nn.functional.softmax(torch.amax(function_batch_scores_tensor, dim=1), dim=0) # B
             
-            strict_match_predictions = clf.forward(strict_match_tokens)
-            soft_match_predictions = clf.forward(unlabeled_tokens)
-            lsim_pos_scores, lsim_neg_scores = model.sim_forward(lsim_query_tokens, query_index_matrix, neg_query_index_matrix)
+            strict_match_predictions = clf.forward(strict_match_tokens, strict_match_lengths, h0_hard, c0_hard)
+            soft_match_predictions = clf.forward(unlabeled_tokens, unlabeled_token_lengths, h0_soft, c0_soft)
+            # lsim_pos_scores, lsim_neg_scores = model.sim_forward(lsim_query_tokens, query_index_matrix, neg_query_index_matrix)
 
             strict_match_loss = strict_match_loss_function(strict_match_predictions, strict_match_labels)
             soft_match_loss = torch.sum(soft_match_loss_function(soft_match_predictions, unlabeled_labels) * unlabeled_label_weights)
-            sim_loss = sim_loss_function(lsim_pos_scores, lsim_neg_scores)
-            combined_loss = strict_match_loss + args.gamma * soft_match_loss + args.beta * sim_loss
+            # sim_loss = sim_loss_function(lsim_pos_scores, lsim_neg_scores)
+            # combined_loss = strict_match_loss + args.gamma * soft_match_loss + args.beta * sim_loss
             combined_loss = strict_match_loss + args.gamma * soft_match_loss
 
             strict_total_loss = strict_total_loss + strict_match_loss.item()
             soft_total_loss = soft_total_loss + soft_match_loss.item()
-            sim_total_loss = sim_total_loss + sim_loss.item()
+            # sim_total_loss = sim_total_loss + sim_loss.item()
             total_loss = total_loss + combined_loss.item()
             batch_count += 1
 
@@ -317,7 +332,7 @@ def main():
                 print((total_loss, strict_total_loss, soft_total_loss, sim_total_loss,  batch_count))
             
             combined_loss.backward()
-            torch.nn.utils.clip_grad_norm_(clf.parameters(), 1.0)
+            torch.nn.utils.clip_grad_norm_(clf.parameters(), 5.0)
 
             optimizer.step()
 
@@ -330,32 +345,43 @@ def main():
         print("Train Losses")
         loss_tuples = ("%.5f" % train_avg_loss, "%.5f" % train_avg_strict_loss, "%.5f" % train_avg_soft_loss, "%.5f" % train_avg_sim_loss)
         print("Avg Train Total Loss: {}, Avg Train Strict Loss: {}, Avg Train Soft Loss: {}, Avg Train Sim Loss: {}".format(*loss_tuples))
-
-        dev_results = evaluate_next_clf(dev_path, clf, TACRED_LABEL_MAP, batch_size=args.eval_batch_size)
         
-        avg_dev_ent_f1_score, avg_dev_val_f1_score, total_dev_class_probs, no_relation_thresholds = dev_results
+        loss_per_epoch.append((train_avg_loss, train_avg_strict_loss, train_avg_soft_loss))
+
+        no_relation_key = "no_relation"
+        
+        train_path = "../data/training_data/{}_data_{}.p".format("matched", save_string)
+        train_results = evaluate_next_clf(train_path, clf, strict_match_loss_function, TACRED_LABEL_MAP, batch_size=args.eval_batch_size, no_relation_key=no_relation_key)
+        avg_loss, avg_train_ent_f1_score, avg_train_val_f1_score, total_train_class_probs, no_relation_thresholds = train_results
+        print("Train Results")
+        train_tuple = ("%.5f" % avg_loss, "%.5f" % avg_train_ent_f1_score, "%.5f" % avg_train_val_f1_score, str(no_relation_thresholds))
+        print("Avg Train Loss: {}, Avg Train Entropy F1 Score: {}, Avg Train Max Value F1 Score: {}, Thresholds: {}".format(*train_tuple))
+
+        dev_results = evaluate_next_clf(dev_path, clf, strict_match_loss_function, TACRED_LABEL_MAP, batch_size=args.eval_batch_size, no_relation_key=no_relation_key)
+        
+        avg_loss, avg_dev_ent_f1_score, avg_dev_val_f1_score, total_dev_class_probs, no_relation_thresholds = dev_results
 
         print("Dev Results")
-        dev_tuple = ("%.5f" % avg_dev_ent_f1_score, "%.5f" % avg_dev_val_f1_score, str(no_relation_thresholds))
-        print("Avg Dev Entropy F1 Score: {}, Avg Dev Max Value F1 Score: {}, Thresholds: {}".format(*dev_tuple))
+        dev_tuple = ("%.5f" % avg_loss, "%.5f" % avg_dev_ent_f1_score, "%.5f" % avg_dev_val_f1_score, str(no_relation_thresholds))
+        print("Avg Dev Loss: {}, Avg Dev Entropy F1 Score: {}, Avg Dev Max Value F1 Score: {}, Thresholds: {}".format(*dev_tuple))
 
-        dev_epoch_f1_scores.append((avg_dev_ent_f1_score, avg_dev_val_f1_score, max(avg_dev_ent_f1_score, avg_dev_val_f1_score)))
+        dev_epoch_f1_scores.append((avg_loss, avg_dev_ent_f1_score, avg_dev_val_f1_score, max(avg_dev_ent_f1_score, avg_dev_val_f1_score)))
         
         if max(avg_dev_ent_f1_score, avg_dev_val_f1_score) > best_dev_f1_score:
             best_dev_f1_score = max(avg_dev_ent_f1_score, avg_dev_val_f1_score)
             print("Updated Dev F1 Score")
         
-        test_results = evaluate_next_clf(test_path, clf, TACRED_LABEL_MAP,\
+        test_results = evaluate_next_clf(test_path, clf, strict_match_loss_function, TACRED_LABEL_MAP,\
                                          no_relation_thresholds=no_relation_thresholds,\
-                                         batch_size=args.eval_batch_size)
+                                         batch_size=args.eval_batch_size, no_relation_key=no_relation_key)
         
-        avg_test_ent_f1_score, avg_test_val_f1_score, total_test_class_probs, _ = test_results
+        avg_loss, avg_test_ent_f1_score, avg_test_val_f1_score, total_test_class_probs, _ = test_results
 
         print("Test Results")
-        test_tuple = ("%.5f" % avg_test_ent_f1_score, "%.5f" % avg_test_val_f1_score, str(no_relation_thresholds))
-        print("Avg Test Entropy F1 Score: {}, Avg Test Max Value F1 Score: {}, Thresholds: {}".format(*test_tuple))
+        test_tuple = ("%.5f" % avg_loss, "%.5f" % avg_test_ent_f1_score, "%.5f" % avg_test_val_f1_score, str(no_relation_thresholds))
+        print("Avg Test Loss: {}, Avg Test Entropy F1 Score: {}, Avg Test Max Value F1 Score: {}, Thresholds: {}".format(*test_tuple))
 
-        test_epoch_f1_scores.append((avg_test_ent_f1_score, avg_test_val_f1_score, max(avg_test_ent_f1_score, avg_test_val_f1_score)))
+        test_epoch_f1_scores.append((avg_loss, avg_test_ent_f1_score, avg_test_val_f1_score, max(avg_test_ent_f1_score, avg_test_val_f1_score)))
 
         if best_test_f1_score < max(avg_test_ent_f1_score, avg_test_val_f1_score):
             print("Saving Model")
@@ -376,15 +402,21 @@ def main():
         print("Best Test F1: {}".format("%.5f" % best_test_f1_score))
         print(test_epoch_f1_scores[-3:])
     
+    with open("../data/result_data/train_loss_per_epoch_Next-Clf_{}.csv".format(args.experiment_name), "w") as f:
+        writer=csv.writer(f)
+        writer.writerow(['train_avg_loss', 'train_avg_strict_loss', 'train_avg_soft_loss'])
+        for row in strict_loss_epoch:
+            writer.writerow([row])
+    
     with open("../data/result_data/dev_f1_per_epoch_Next-Clf_{}.csv".format(args.experiment_name), "w") as f:
         writer=csv.writer(f)
-        writer.writerow(['entropy_f1_score','max_value_f1_score', 'max'])
+        writer.writerow(['avg_loss, entropy_f1_score','max_value_f1_score', 'max'])
         for row in dev_epoch_f1_scores:
             writer.writerow(row)
     
     with open("../data/result_data/test_f1_per_epoch_Next-Clf_{}.csv".format(args.experiment_name), "w") as f:
         writer=csv.writer(f)
-        writer.writerow(['entropy_f1_score','max_value_f1_score', 'max'])
+        writer.writerow(['avg_loss, entropy_f1_score','max_value_f1_score', 'max'])
         for row in test_epoch_f1_scores:
             writer.writerow(row)
 

@@ -36,13 +36,13 @@ def build_phrase_input(phrases, pad_idx):
     ners = [phrase.ners for phrase in phrases]
     subj_posis = torch.tensor([phrase.subj_posi for phrase in phrases]).unsqueeze(1)
     obj_posis =  torch.tensor([phrase.obj_posi for phrase in phrases]).unsqueeze(1)
-    subj =  torch.tensor([phrase.ners[phrase.subj_posi] for phrase in phrases]).unsqueeze(1)
-    obj = torch.tensor([phrase.ners[phrase.obj_posi] for phrase in phrases]).unsqueeze(1)
+    subj =  torch.tensor([phrase.tokens[phrase.subj_posi] for phrase in phrases]).unsqueeze(1)
+    obj = torch.tensor([phrase.tokens[phrase.obj_posi] for phrase in phrases]).unsqueeze(1)
 
     ner_pad = NER_LABEL_SPACE["<PAD>"]
 
-    tokens = BaseVariableLengthDataset.variable_length_batch_as_tensors(tokens, pad_idx)
-    ners = BaseVariableLengthDataset.variable_length_batch_as_tensors(ners, ner_pad)
+    tokens, _ = BaseVariableLengthDataset.variable_length_batch_as_tensors(tokens, pad_idx)
+    ners, _ = BaseVariableLengthDataset.variable_length_batch_as_tensors(ners, ner_pad)
 
     assert tokens.shape == ners.shape
 
@@ -101,7 +101,7 @@ def _prepare_unlabeled_data(unlabeled_data_phrases, vocab, custom_vocab={}):
         ners = [NER_LABEL_SPACE[ner] for ner in ners]
         
         seq_tokens.append(tokens)
-        phrase.update_tokens_and_ners(tokens, ners) # its okay to update with custom vocab, hard-matching is done, now embeddings matter
+        phrase.update_tokens_and_ners(tokens, ners) # its okay to update with custom vocab, hard-matching is done
         seq_phrases.append(phrase)
     
     return seq_tokens, seq_phrases

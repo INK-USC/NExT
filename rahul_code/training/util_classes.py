@@ -186,7 +186,7 @@ class UnlabeledTrainingDataset(BaseVariableLengthDataset):
         """
         if shuffle:
             temp_data = list(zip(self.tokens, self.phrases))
-            random.shuffle(temp_data)
+            random.Random(seed).shuffle(temp_data)
             self.tokens, self.phrases = zip(*temp_data)
         for i in range(0, len(self.tokens), batch_size): # i incrememt by batch_size
             batch_tokens = self.tokens[i: i+batch_size] # slice
