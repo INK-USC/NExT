@@ -36,8 +36,8 @@ def build_phrase_input(phrases, pad_idx):
     ners = [phrase.ners for phrase in phrases]
     subj_posis = torch.tensor([phrase.subj_posi for phrase in phrases]).unsqueeze(1)
     obj_posis =  torch.tensor([phrase.obj_posi for phrase in phrases]).unsqueeze(1)
-    subj =  torch.tensor([phrase.tokens[phrase.subj_posi] for phrase in phrases]).unsqueeze(1)
-    obj = torch.tensor([phrase.tokens[phrase.obj_posi] for phrase in phrases]).unsqueeze(1)
+    subj =  torch.tensor([phrase.ners[phrase.subj_posi] for phrase in phrases]).unsqueeze(1) # has to be NERs due to type check
+    obj = torch.tensor([phrase.ners[phrase.obj_posi] for phrase in phrases]).unsqueeze(1)
 
     ner_pad = NER_LABEL_SPACE["<PAD>"]
 
