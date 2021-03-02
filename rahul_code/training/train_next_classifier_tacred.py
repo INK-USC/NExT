@@ -272,7 +272,7 @@ def main():
         find_module.eval()
 
         for step, batch_pair in enumerate(tqdm(zip(strict_match_data.as_batches(batch_size=args.match_batch_size, seed=epoch),\
-                                                   unlabeled_data.as_batches(batch_size=args.unlabeled_batch_size, seed=epoch)))):
+                                                   unlabeled_data.as_batches(batch_size=args.unlabeled_batch_size, seed=epoch*args.seed)))):
             
             # prepping batch data
             strict_match_data_batch, unlabeled_data_batch = batch_pair
