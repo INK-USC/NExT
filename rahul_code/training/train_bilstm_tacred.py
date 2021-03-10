@@ -4,12 +4,11 @@ import torch
 import sys
 sys.path.append(".")
 sys.path.append("../")
-from training.train_util_functions import batch_type_restrict, build_phrase_input, build_mask_mat_for_batch,\
-                                   set_tacred_ner_label_space, build_datasets_from_splits, evaluate_next_clf,\
-                                   build_custom_vocab
-from training.util_functions import similarity_loss_function, generate_save_string
+from training.train_util_functions import build_datasets_from_splits, evaluate_next_clf                             
+from training.util_functions import similarity_loss_function, generate_save_string, build_custom_vocab,\
+                                    set_re_dataset_ner_label_space
 from training.util_classes import BaseVariableLengthDataset
-from training.constants import TACRED_LABEL_MAP, FIND_MODULE_HIDDEN_DIM
+from training.constants import TACRED_LABEL_MAP, FIND_MODULE_HIDDEN_DIM, TACRED_ENTITY_TYPES
 from models import BiLSTM_Att_Clf, Find_Module
 import pickle
 from tqdm import tqdm
@@ -106,15 +105,16 @@ def main():
     random.seed(args.seed)
     lower_bound = -20.0
     dataset = "tacred"
-    save_string = generate_save_string(args.embeddings)
-
-    if dataset == "tacred":
-        set_tacred_ner_label_space()
-        number_of_classes = len(TACRED_LABEL_MAP)
+    save_string = generate_save_string(dataset, args.embeddings)
+    number_of_classes = len(TACRED_LABEL_MAP)
+    none_label_id = TACRED_LABEL_MAP["no_relation"]
+    set_re_dataset_ner_label_space(dataset)
+    task = "re"
 
     if args.build_data:
         build_datasets_from_splits(args.train_path, args.dev_path, args.test_path, args.vocab_path,
-                                  args.explanation_data_path, save_string, dataset=dataset)
+                                   TACRED_LABEL_MAP, args.explanation_data_path, save_string,
+                                   task=task, dataset=dataset)
     
     with open("../data/training_data/{}_data_{}.p".format("matched", save_string), "rb") as f:
         strict_match_data = pickle.load(f)
@@ -136,7 +136,8 @@ def main():
     custom_vocab_length = len(tacred_vocab)
 
     clf = BiLSTM_Att_Clf.BiLSTM_Att_Clf(vocab.vectors, pad_idx, args.emb_dim, args.hidden_dim,
-                                        torch.cuda.is_available(), number_of_classes, custom_token_count=custom_vocab_length)
+                                        torch.cuda.is_available(), number_of_classes,
+                                        custom_token_count=custom_vocab_length)
     
     del vocab
 
@@ -196,7 +197,6 @@ def main():
         for step, batch in enumerate(tqdm(strict_match_data.as_batches(batch_size=args.match_batch_size, seed=epoch))):
             
             # prepping batch data
-            # strict_match_data_batch = [r.to(device) for r in batch]
             strict_match_tokens, strict_match_lengths, strict_match_labels = batch
 
             strict_match_tokens = strict_match_tokens.to(device)
@@ -228,17 +228,15 @@ def main():
         print("Avg Train Total Loss: {}, Avg Train Strict Loss: {}, Avg Train Soft Loss: {}, Avg Train Sim Loss: {}".format(*loss_tuples))
 
         strict_loss_epoch.append(train_avg_strict_loss)
-
-        no_relation_key = "no_relation"
         
         train_path = "../data/training_data/{}_data_{}.p".format("matched", save_string)
-        train_results = evaluate_next_clf(train_path, clf, strict_match_loss_function, TACRED_LABEL_MAP, batch_size=args.eval_batch_size, no_relation_key=no_relation_key)
+        train_results = evaluate_next_clf(train_path, clf, strict_match_loss_function, number_of_classes, batch_size=args.eval_batch_size, none_label_id=none_label_id)
         avg_loss, avg_train_ent_f1_score, avg_train_val_f1_score, total_train_class_probs, no_relation_thresholds = train_results
         print("Train Results")
         train_tuple = ("%.5f" % avg_loss, "%.5f" % avg_train_ent_f1_score, "%.5f" % avg_train_val_f1_score, str(no_relation_thresholds))
         print("Avg Train Loss: {}, Avg Train Entropy F1 Score: {}, Avg Train Max Value F1 Score: {}, Thresholds: {}".format(*train_tuple))
 
-        dev_results = evaluate_next_clf(dev_path, clf, strict_match_loss_function, TACRED_LABEL_MAP, batch_size=args.eval_batch_size, no_relation_key=no_relation_key)
+        dev_results = evaluate_next_clf(dev_path, clf, strict_match_loss_function, number_of_classes, batch_size=args.eval_batch_size, none_label_id=none_label_id)
         
         avg_loss, avg_dev_ent_f1_score, avg_dev_val_f1_score, total_dev_class_probs, no_relation_thresholds = dev_results
 
@@ -252,9 +250,9 @@ def main():
             best_dev_f1_score = max(avg_dev_ent_f1_score, avg_dev_val_f1_score)
             print("Updated Dev F1 Score")
         
-        test_results = evaluate_next_clf(test_path, clf, strict_match_loss_function, TACRED_LABEL_MAP,\
+        test_results = evaluate_next_clf(test_path, clf, strict_match_loss_function, number_of_classes,\
                                          no_relation_thresholds=no_relation_thresholds,\
-                                         batch_size=args.eval_batch_size, no_relation_key=no_relation_key)
+                                         batch_size=args.eval_batch_size, none_label_id=none_label_id)
         
         avg_loss, avg_test_ent_f1_score, avg_test_val_f1_score, total_test_class_probs, _ = test_results
 

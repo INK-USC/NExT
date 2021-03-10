@@ -5,6 +5,7 @@ import json
 sys.path.append("../")
 sys.path.append("../CCG_new/")
 from CCG_new import utils
+from CCG_new.parser import CCGParserTrainer, TrainedCCGParser
 
 nlp = spacy.load("en_core_web_sm")
 
@@ -175,8 +176,8 @@ def test_generate_phrase():
     sentence = "GAMEDAY VS BUFORD TODAY AT 5:30 AT HOME ! ! ! NEVER BEEN SO EXCITED #revenge"
     phrase_tokens = ['GAMEDAY', 'VS', 'BUFORD', 'TODAY', 'AT', '5:30', 'AT', 'HOME', '!', '!', '!', 'NEVER', 'BEEN', 'SO', 'EXCITED', '#', 'revenge']
     phrase_ners = ['ORG', '', '', '', '', 'TIME', '', '', '', '', '', '', '', '', '', '', '']
-    phrase_subj_posi = None
-    phrase_obj_posi = None
+    phrase_subj_posi = len(phrase_tokens)
+    phrase_obj_posi = len(phrase_tokens)
     phrase = utils.generate_phrase(sentence, nlp)
     assert len(phrase.tokens) == len(phrase.ners)
     assert phrase.tokens == phrase_tokens
@@ -184,16 +185,317 @@ def test_generate_phrase():
     assert phrase.subj_posi == phrase_subj_posi
     assert phrase.obj_posi == phrase_obj_posi
 
-# def test_create_semantic_repr_re():
-#     with open("data/tacred_explanations.json") as f:
-#         tacred_explanations = json.load(f)
+def test_parse_tokens_re():
+    re_ccg_trainer = CCGParserTrainer(task="re", explanation_file="data/tacred_test_explanation_data.json",
+                                      unlabeled_data_file="data/tacred_test_unlabeled_data.json")
+    explanation_file = re_ccg_trainer.params["explanation_file"]
+    re_ccg_trainer.load_data(explanation_file)
+    parser = re_ccg_trainer.parser
+    parser.create_and_set_grammar()
+    parser_grammar = parser.grammar
     
-#     for 
+    re_tokens = [
+        ['$The', '$Word', '"PUNCT5sSPACEdaughter"', '$Link', '$ArgX', '$And', '$ArgY', '$And', '$There', '$Is', '$AtMost', '"3"', '$Word', '$Between', '$ArgX', '$And', '$ArgY'],
+        ['$ArgX', '$And', '$ArgY', '$SandWich', '$The', '$Word', '"wasSPACEborn"', '$And', '$There', '$Is', '$AtMost', '"3"', '$Word', '$Between', '$ArgX', '$And', '$ArgY'],
+        ['$There', '$Is', '$AtMost', '"5"', '$Word', '$Between', '$ArgX', '$And', '$ArgY', '$And', '"asSPACEpartSPACEofSPACEits"', '$Is', '$Between', '$ArgX', '$And', '$ArgY'],
+        ['$Between', '$ArgX', '$And', '$ArgY', '$The', '$Word', '"whoSPACEdiedSPACEof"', '$Is', '$And', '$There', '$Is', '$AtMost', '"5"', '$Word', '$Between', '$ArgX', '$And', '$ArgY'],
+        ['$Between', '$ArgX', '$And', '$ArgY', '$The', '$Word', '"isSPACEfrom"', '$Is', '$And', '$There', '$Is', '$AtMost', '"4"', '$Word', '$Between', '$ArgX', '$And', '$ArgY'],
+        ['$The', '$Word', '"PUNCT5sSPACEgrandmother"', '$Is', '$Between', '$ArgX', '$And', '$ArgY', '$And', '$There', '$Is', '$AtMost', '"4"', '$Word', '$Between', '$ArgX', '$And', '$ArgY'],
+        ['$The', '$Word', '"isSPACEbasedSPACEin"', '$Is', '$Between', '$ArgX', '$And', '$ArgY', '$And', '$There', '$Is', '$AtMost', '"5"', '$Word', '$Between', '$ArgX', '$And', '$ArgY'],
+        ['$The', '$Word', '"thenSPACEknownSPACEas"', '$Is', '$Between', '$ArgX', '$And', '$ArgY', '$And', '$There', '$Is', '$AtMost', '"6"', '$Word', '$Between', '$ArgX', '$And', '$ArgY'],
+        ['$ArgX', '$And', '$ArgY', '$SandWich', '$The', '$Word', '"PUNCT5sSPACEmother"', '$And', '$There', '$Is', '$AtMost', '"3"', '$Word', '$Between', '$ArgX', '$And', '$ArgY'],
+        ['$There', '$Is', '$AtMost', '"4"', '$Word', '$Between', '$ArgX', '$And', '$ArgY', '$And', '$ArgX', '$And', '$ArgY', '$SandWich', '$The', '$Word', '"secretlySPACEmarried"']
+    ]
 
+    correct_parses = [
+        '\'@And\'(\'@Is\'(\'There\',\'@AtMost\'(\'@between\'(\'@And\'(\'ArgY\',\'ArgX\')),\'@Num\'("3",\'tokens\'))),\'@Is\'(\'@Word\'("PUNCT5sSPACEdaughter"),\'@between\'(\'@And\'(\'ArgY\',\'ArgX\'))))',
+        '\'@And\'(\'@Is\'(\'There\',\'@AtMost\'(\'@between\'(\'@And\'(\'ArgY\',\'ArgX\')),\'@Num\'("3",\'tokens\'))),\'@Is\'(\'@Word\'("wasSPACEborn"),\'@between\'(\'@And\'(\'ArgY\',\'ArgX\'))))',
+        '\'@And\'(\'@Is\'("asSPACEpartSPACEofSPACEits",\'@between\'(\'@And\'(\'ArgY\',\'ArgX\'))),\'@Is\'(\'There\',\'@AtMost\'(\'@between\'(\'@And\'(\'ArgY\',\'ArgX\')),\'@Num\'("5",\'tokens\'))))',
+        '\'@And\'(\'@Is\'(\'There\',\'@AtMost\'(\'@between\'(\'@And\'(\'ArgY\',\'ArgX\')),\'@Num\'("5",\'tokens\'))),\'@Is\'(\'@Word\'("whoSPACEdiedSPACEof"),\'@between\'(\'@And\'(\'ArgY\',\'ArgX\'))))',
+        '\'@And\'(\'@Is\'(\'There\',\'@AtMost\'(\'@between\'(\'@And\'(\'ArgY\',\'ArgX\')),\'@Num\'("4",\'tokens\'))),\'@Is\'(\'@Word\'("isSPACEfrom"),\'@between\'(\'@And\'(\'ArgY\',\'ArgX\'))))',
+        '\'@And\'(\'@Is\'(\'There\',\'@AtMost\'(\'@between\'(\'@And\'(\'ArgY\',\'ArgX\')),\'@Num\'("4",\'tokens\'))),\'@Is\'(\'@Word\'("PUNCT5sSPACEgrandmother"),\'@between\'(\'@And\'(\'ArgY\',\'ArgX\'))))',
+        '\'@And\'(\'@Is\'(\'There\',\'@AtMost\'(\'@between\'(\'@And\'(\'ArgY\',\'ArgX\')),\'@Num\'("5",\'tokens\'))),\'@Is\'(\'@Word\'("isSPACEbasedSPACEin"),\'@between\'(\'@And\'(\'ArgY\',\'ArgX\'))))',
+        '\'@And\'(\'@Is\'(\'There\',\'@AtMost\'(\'@between\'(\'@And\'(\'ArgY\',\'ArgX\')),\'@Num\'("6",\'tokens\'))),\'@Is\'(\'@Word\'("thenSPACEknownSPACEas"),\'@between\'(\'@And\'(\'ArgY\',\'ArgX\'))))',
+        '\'@And\'(\'@Is\'(\'There\',\'@AtMost\'(\'@between\'(\'@And\'(\'ArgY\',\'ArgX\')),\'@Num\'("3",\'tokens\'))),\'@Is\'(\'@Word\'("PUNCT5sSPACEmother"),\'@between\'(\'@And\'(\'ArgY\',\'ArgX\'))))',
+        '\'@And\'(\'@Is\'(\'@Word\'("secretlySPACEmarried"),\'@between\'(\'@And\'(\'ArgY\',\'ArgX\'))),\'@Is\'(\'There\',\'@AtMost\'(\'@between\'(\'@And\'(\'ArgY\',\'ArgX\')),\'@Num\'("4",\'tokens\'))))'
+    ]
+
+    parses = []
+    for tokenization in re_tokens:
+        parses.append(utils.parse_tokens(tokenization, parser_grammar))
+    
+    for i, c_parse in enumerate(correct_parses):
+        assert c_parse in parses[i]
+
+def test_parse_tokens_ec():
+    ec_ccg_trainer = CCGParserTrainer(task="ec", explanation_file="data/ec_test_data.json",
+                                      unlabeled_data_file="data/carer_test_data.json")
+    explanation_file = ec_ccg_trainer.params["explanation_file"]
+    ec_ccg_trainer.load_data(explanation_file)
+    parser = ec_ccg_trainer.parser
+    parser.create_and_set_grammar()
+    parser_grammar = parser.grammar
+    
+    ec_tokens = [
+        ['$The', '$Sentence', '$Contains', '$The', '$Word', '"angry"'],
+        ['$The', '$Sentence', '$Contains', '$The', '$Word', '"increasingSPACEanger"'],
+        ['$The', '$Sentence', '$Contains', '$The', '$Word', '"beenSPACEsoSPACEexcited"'],
+        ['$The', '$Sentence', '$Contains', '$The', '$Word', '"whenSPACEtheSPACEgtaSPACEonlineSPACEbikerSPACEdlcSPACEcomesSPACEout"'],
+        ['$The', '$Sentence', '$Contains', '$The', '$Word', '"bigot"'],
+        ['$The', '$Sentence', '$Contains', '$The', '$Word', '"howSPACEshit"'],
+        ['$The', '$Sentence', '$Contains', '$The', '$Word', '"terrorSPACEthreat"'],
+        ['$The', '$Sentence', '$Contains', '$The', '$Word', '"panic"'],
+        ['$The', '$Sentence', '$Contains', '$The', '$Word', '"smiling"'],
+        ['$The', '$Sentence', '$Contains', '$The', '$Word', '"cheerySPACEsmile"'],
+        ['$The', '$Sentence', '$Contains', '$The', '$Word', '"soSPACEsad"'],
+        ['$The', '$Sentence', '$Contains', '$The', '$Word', '"mySPACEdepression"'],
+        ['$The', '$Sentence', '$Contains', '$The', '$Word', '"bitSPACEsurprised"'],
+        ['$The', '$Sentence', '$Contains', '$The', '$Word', '"soSPACEsudden"'],
+        ['$The', '$Sentence', '$Contains', '$The', '$Word', '"honesty"'],
+        ['$The', '$Word', '"dependentSPACEonSPACEanotherSPACEperson"', '$In', '$The', '$Sentence']
+    ]
+
+    correct_parses = [
+        '\'@In1\'(\'Sentence\',\'@Word\'("angry"))',
+        '\'@In1\'(\'Sentence\',\'@Word\'("increasingSPACEanger"))',
+        '\'@In1\'(\'Sentence\',\'@Word\'("beenSPACEsoSPACEexcited"))',
+        '\'@In1\'(\'Sentence\',\'@Word\'("whenSPACEtheSPACEgtaSPACEonlineSPACEbikerSPACEdlcSPACEcomesSPACEout"))',
+        '\'@In1\'(\'Sentence\',\'@Word\'("bigot"))',
+        '\'@In1\'(\'Sentence\',\'@Word\'("howSPACEshit"))',
+        '\'@In1\'(\'Sentence\',\'@Word\'("terrorSPACEthreat"))',
+        '\'@In1\'(\'Sentence\',\'@Word\'("panic"))',
+        '\'@In1\'(\'Sentence\',\'@Word\'("smiling"))',
+        '\'@In1\'(\'Sentence\',\'@Word\'("cheerySPACEsmile"))',
+        '\'@In1\'(\'Sentence\',\'@Word\'("soSPACEsad"))',
+        '\'@In1\'(\'Sentence\',\'@Word\'("mySPACEdepression"))',
+        '\'@In1\'(\'Sentence\',\'@Word\'("bitSPACEsurprised"))',
+        '\'@In1\'(\'Sentence\',\'@Word\'("soSPACEsudden"))',
+        '\'@In1\'(\'Sentence\',\'@Word\'("honesty"))',
+        '\'@In1\'(\'Sentence\',\'@Word\'("dependentSPACEonSPACEanotherSPACEperson"))'
+    ]
+
+    parses = []
+    for tokenization in ec_tokens:
+        parses.append(utils.parse_tokens(tokenization, parser_grammar))
+    
+    for i, c_parse in enumerate(correct_parses):
+        assert c_parse in parses[i]
+
+def test_create_semantic_repr():
+    parsed_rep = '\'@And\'(\'@Is\'(\'There\',\'@AtMost\'(\'@between\'(\'@And\'(\'ArgY\',\'ArgX\')),\'@Num\'("3",\'tokens\'))),\'@Is\'(\'@Word\'("PUNCT5sSPACEdaughter"),\'@between\'(\'@And\'(\'ArgY\',\'ArgX\'))))'
+    
+    semantic_rep = ('.root',
+                        ('@And',
+                            ('@Is',
+                                'There',
+                                ('@AtMost',
+                                    ('@between', ('@And', 'ArgY', 'ArgX')),
+                                    ('@Num', '3', 'tokens'))),
+                            ('@Is', ('@Word', "'s daughter"), ('@between', ('@And', 'ArgY', 'ArgX')))))
+
+    assert semantic_rep == utils.create_semantic_repr(parsed_rep)
+
+def test_check_clauses_in_parse_filter():
+    semantic_counts = {
+        ('.root',
+            ('@And',
+                ('@Is',
+                    ('@And', 'There', 'ArgY'),
+                    ('@AtMost',
+                        ('@between', ('@And', 'ArgY', 'ArgX')),
+                        ('@Num', '3', 'tokens'))),
+                ('@Is', ('@Word', "'s daughter"), ('@between', 'ArgX')))): 1,
+        ('.root',
+            ('@And',
+                ('@Is',
+                    'There',
+                    ('@AtMost',
+                        ('@between', ('@And', 'ArgY', 'ArgX')),
+                        ('@Num', '3', 'tokens'))),
+                ('@Is',
+                    ('@Word', "'s daughter"),
+                    ('@between', ('@And', 'ArgY', 'ArgX'))))): 1
+    }
+
+    final_counts = {
+        ('.root',
+            ('@And',
+                ('@Is',
+                    'There',
+                    ('@AtMost',
+                        ('@between', ('@And', 'ArgY', 'ArgX')),
+                        ('@Num', '3', 'tokens'))),
+                ('@Is',
+                    ('@Word', "'s daughter"),
+                    ('@between', ('@And', 'ArgY', 'ArgX'))))): 1
+    }
+
+    filtered_counts = utils.check_clauses_in_parse_filter(semantic_counts)
+
+    assert filtered_counts == final_counts
+
+    semantic_counts = {
+        ('.root',
+            ('@Is',
+                'There',
+                ('@WordCount',
+                    ('@Num', '1', 'head'),
+                    ('@Word', 'head'),
+                    ('@between', ('@And', 'ArgY', 'ArgX'))))): 1,
+        ('.root',
+            ('@Is',
+                'There',
+                ('@WordCount',
+                    ('@Num', '1', 'tokens'),
+                    'head',
+                    ('@between', ('@And', 'ArgY', 'ArgX'))))): 1,
+        ('.root',
+            ('@Is',
+            '   There',
+                ('@WordCount',
+                    ('@Num', '1', ('@Word', 'head')),
+                    ('@And', 'ArgY', 'ArgX'),
+                    ('@between', ('@And', 'ArgY', 'ArgX'))))): 1
+    }
+
+    final_counts = {
+        ('.root',
+            ('@Is',
+                'There',
+                ('@WordCount',
+                    ('@Num', '1', 'tokens'),
+                    'head',
+                    ('@between', ('@And', 'ArgY', 'ArgX'))))): 1
+    }
+
+    filtered_counts = utils.check_clauses_in_parse_filter(semantic_counts)
+
+    assert filtered_counts == final_counts
+
+    semantic_counts = {
+        ('.root',
+            ('@And',
+                ('@Is',
+                    'There',
+                    ('@AtMost',
+                        ('@between', ('@And', 'ArgY', 'ArgX')),
+                        ('@Num', '3', 'tokens'))),
+                ('@Is',
+                    ('@Word', "'s daughter"),
+                    ('@between', ('@And', 'ArgY', 'ArgX'))))): 1,
+        ('.root',
+            ('@And',
+                ('@Is',
+                    'There',
+                    ('@AtMost',
+                        ('@between', ('@And', 'ArgX', 'ArgY')),
+                        ('@Num', '3', 'tokens'))),
+                ('@Is',
+                    ('@Word', "'s daughter"),
+                    ('@between', ('@And', 'ArgX', 'ArgY'))))): 1
+    }
+
+    final_counts = {
+        ('.root',
+            ('@And',
+                ('@Is',
+                    'There',
+                    ('@AtMost',
+                        ('@between', ('@And', 'ArgY', 'ArgX')),
+                        ('@Num', '3', 'tokens'))),
+                ('@Is',
+                    ('@Word', "'s daughter"),
+                    ('@between', ('@And', 'ArgY', 'ArgX'))))): 1
+    }
+
+
+    filtered_counts = utils.check_clauses_in_parse_filter(semantic_counts)
+
+    assert filtered_counts == final_counts
+
+    semantic_counts = {
+        ('.root', ('@In1', 'Sentence', ('@Word', 'increasing anger'))): 1
+    }
+
+    filtered_counts = utils.check_clauses_in_parse_filter(semantic_counts)
+
+    assert filtered_counts == semantic_counts
+
+def test_create_labeling_function_sa():
+    semantic_reps = [
+        ('.root', ('@In1', 'Sentence', ('@Word', 'angry'))),
+        ('.root', ('@In1', 'Sentence', ('@Word', 'increasing anger'))),
+        ('.root', ('@In1', 'Sentence', ('@Word', 'been so excited'))),
+        ('.root', ('@In1', 'Sentence', ('@Word', 'when the gta online biker dlc comes out'))),
+        ('.root', ('@In1', 'Sentence', ('@Word', 'bigot'))),
+        ('.root', ('@In1', 'Sentence', ('@Word', 'how shit'))),
+        ('.root', ('@In1', 'Sentence', ('@Word', 'terror threat'))),
+        ('.root', ('@In1', 'Sentence', ('@Word', 'panic'))),
+        ('.root', ('@In1', 'Sentence', ('@Word', 'smiling'))),
+        ('.root', ('@In1', 'Sentence', ('@Word', 'cheery smile'))),
+        ('.root', ('@In1', 'Sentence', ('@Word', 'so sad'))),
+        ('.root', ('@In1', 'Sentence', ('@Word', 'my depression'))),
+        ('.root', ('@In1', 'Sentence', ('@Word', 'bit surprised'))),
+        ('.root', ('@In1', 'Sentence', ('@Word', 'so sudden'))),
+        ('.root', ('@In1', 'Sentence', ('@Word', 'honesty'))),
+        ('.root', ('@In1', 'Sentence', ('@Word', 'dependent on another person')))
+    ]
+
+    for rep in semantic_reps:
+        assert utils.create_labeling_function(rep) != False
 
 def test_create_labeling_function_re():
-    with open("data/ziqi_semantic_reps.p", "rb") as f:
-        ziqi_semantic_reps = pickle.load(f)
+    # to ensure parity with original paper code, author gave semantic reps
+    # and just ensuring the create label works on all of them.
+    with open("data/semantic_reps_re.p", "rb") as f:
+        re_semantic_reps = pickle.load(f)
     
-    for rep in ziqi_semantic_reps:
+    for rep in re_semantic_reps:
+        assert utils.create_labeling_function(rep) != False
+    
+    # and a bit more of a visual of what's going on
+    semantic_reps = [
+        ('.root',
+            ('@And',
+            ('@Is',
+                'There',
+                ('@AtMost',
+                ('@between', ('@And', 'ArgY', 'ArgX')),
+                ('@Num', '3', 'tokens'))),
+            ('@Is', ('@Word', "'s daughter"), ('@between', ('@And', 'ArgY', 'ArgX'))))),
+        ('.root',
+            ('@And',
+            ('@Is',
+                'There',
+                ('@AtMost',
+                ('@between', ('@And', 'ArgY', 'ArgX')),
+                ('@Num', '3', 'tokens'))),
+            ('@Is', ('@Word', 'was born'), ('@between', ('@And', 'ArgY', 'ArgX'))))),
+        ('.root',
+            ('@And',
+            ('@Is', 'as part of its', ('@between', ('@And', 'ArgY', 'ArgX'))),
+            ('@Is',
+                'There',
+                ('@AtMost',
+                ('@between', ('@And', 'ArgY', 'ArgX')),
+            ('@Num', '5', 'tokens'))))),
+        ('.root',
+            ('@And',
+            ('@Is',
+                'There',
+                ('@AtMost',
+                ('@between', ('@And', 'ArgY', 'ArgX')),
+                ('@Num', '5', 'tokens'))),
+            ('@Is', ('@Word', 'who died of'), ('@between', ('@And', 'ArgY', 'ArgX'))))),
+        ('.root',
+            ('@And',
+            ('@Is',
+                'There',
+                ('@AtMost',
+                ('@between', ('@And', 'ArgY', 'ArgX')),
+                ('@Num', '4', 'tokens'))),
+            ('@Is', ('@Word', 'is from'), ('@between', ('@And', 'ArgY', 'ArgX')))))
+    ]
+
+    for rep in semantic_reps:
         assert utils.create_labeling_function(rep) != False

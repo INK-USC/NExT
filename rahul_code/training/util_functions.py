@@ -1,23 +1,63 @@
+import sys
+sys.path.append(".")
+sys.path.append("../")
 import spacy
 from torchtext.data import Field, Example, Dataset
 import pickle
 import re
 import torch
 import collections
-from training.constants import TACRED_NERS
+from training.constants import TACRED_NERS, SPACY_TO_TACRED, SPACY_NERS
+from CCG_new.soft_grammar_functions import NER_LABEL_SPACE
 
 nlp = spacy.load("en_core_web_sm")
+
+def load_spacy_to_custom_dataset_ner_mapping(dataset):
+    if dataset == "tacred":
+        return SPACY_TO_TACRED
+    return {}
+
+def set_ner_label_space(labels):
+    if len(NER_LABEL_SPACE) > 0:
+        largest_key = max(list(NER_LABEL_SPACE.values()))
+    else:
+        largest_key = -1
+    current_key = largest_key + 1
+    for label in labels:
+        if label not in NER_LABEL_SPACE:
+            NER_LABEL_SPACE[label] = current_key
+            current_key += 1
+
+def set_re_dataset_ner_label_space(dataset, custom_ners=[]):
+    temp = SPACY_NERS[:]
+    
+    custom_mapping = load_spacy_to_custom_dataset_ner_mapping(dataset)
+   
+    for i, entry in enumerate(temp):
+        if entry in custom_mapping:
+            temp[i] = custom_mapping[entry]
+    
+    temp.append("<PAD>")
+    set_ner_label_space(temp)
+    set_ner_label_space(custom_ners)
+
+def _build_tacred_custom_vocab(vocab_length):
+    custom_vocab = {}
+    cur_key = vocab_length
+    for key in TACRED_NERS:
+        custom_vocab["SUBJ-{}".format(key)] = cur_key
+        cur_key += 1
+        custom_vocab["OBJ-{}".format(key)] = cur_key
+        cur_key += 1
+        
+    return custom_vocab
 
 def build_custom_vocab(dataset, vocab_length):
     custom_vocab = {}
     
     if dataset == "tacred":
-        cur_key = vocab_length
-        for key in TACRED_NERS:
-            custom_vocab["SUBJ-{}".format(key)] = cur_key
-            cur_key += 1
-            custom_vocab["OBJ-{}".format(key)] = cur_key
-            cur_key += 1
+        custom_vocab = _build_tacred_custom_vocab(vocab_length)
+    # elif...
         
     return custom_vocab
 
@@ -46,21 +86,23 @@ def find_array_start_position(big_array, small_array):
 
     return -1
 
-def generate_save_string(embedding_name, random_state=-1, sample=-1.0):
+def generate_save_string(dataset, embedding_name, random_state=-1, sample=-1.0):
     """
         To allow for multiple datasets to exist at once, we add this string to identify which dataset a run
         script should load.
 
         Arguments:
+            dataset        (str) : name of dataset
             embedding_name (str) : name of pre-trained embedding to use
                                    (possible names can be found in possible_embeddings)
             random_state   (int) : random state used to split data into train, dev, test (if applicable)
             sample       (float) : percentage of possible data used for training
     """
-    return "_".join([embedding_name, str(random_state), str(sample)])
+    return "_".join([dataset, embedding_name, str(random_state), str(sample)])
 
 def clean_text(text):
     text = text.strip()
+    text = text.lower()
     text = text.replace('\n', '')
 
     return text
@@ -94,19 +136,17 @@ def tokenize(sentence, tokenizer=nlp):
         sentence = re.sub(r"OBJ-[A-Z_]+", "OBJ", sentence)
         sentence = re.sub(r"OBJ-[A-Z_'s]+", "OBJ's ", sentence)
         sentence = re.sub(r"OBJ-[A-Z_]+,", "OBJ,", sentence)
-    elif "SUBJ" in sentence and "OBJ" in sentence:
-        print(sentence)
     
     sentence = clean_text(sentence)
 
     spacy_tokens = [tok.text for tok in tokenizer.tokenizer(sentence)]
 
     if sbj_replacement != None:
-        sbj_index = spacy_tokens.index("SUBJ")
+        sbj_index = spacy_tokens.index("subj")
         assert sbj_index > -1
         spacy_tokens[sbj_index] = sbj_replacement
     if obj_replacement != None:
-        obj_index = spacy_tokens.index("OBJ")
+        obj_index = spacy_tokens.index("obj")
         assert obj_index > -1
         spacy_tokens[obj_index] = obj_replacement
     

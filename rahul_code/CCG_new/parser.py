@@ -49,7 +49,6 @@ class TrainedCCGParser():
             Arguments:
                 init_grammar (str) : initial grammar to use
         """
-        # pdb.set_trace()
         quote_words = {}
         for i, triple in enumerate(self.loaded_data):
             explanation = triple.raw_explanation
@@ -110,68 +109,68 @@ class TrainedCCGParser():
                 2. Parse Trees -> Semantic Representation
                 3. Semantic Representation -> Labeling Function
         """
-        # cut_off = int(len(self.loaded_data) * 0.2)
-        # for i, datapoint in enumerate(self.loaded_data):
-        #     if len(datapoint.raw_explanation):
-        #         tokenizations = self.loaded_data[i].tokenized_explanations
-        #         logic_forms = []
-        #         for tokenization in tokenizations:
-        #             try:
-        #                 parses = list(utils.parse_tokens(tokenization, self.grammar))
-        #                 logic_forms += parses
-        #             except:
-        #                 continue
-        #         semantic_counts = {}
-        #         if len(logic_forms):
-        #             semantic_counts = {}
-        #             for parse in logic_forms:
-        #                 semantic_repr = utils.create_semantic_repr_ziqi(parse)
-        #                 if semantic_repr:
-        #                     if semantic_repr in semantic_counts:
-        #                         semantic_counts[semantic_repr] += 1
-        #                     else:
-        #                         semantic_counts[semantic_repr] = 1
+        cut_off = int(len(self.loaded_data) * 0.2)
+        for i, datapoint in enumerate(self.loaded_data):
+            if len(datapoint.raw_explanation):
+                tokenizations = self.loaded_data[i].tokenized_explanations
+                logic_forms = []
+                for tokenization in tokenizations:
+                    try:
+                        parses = list(utils.parse_tokens(tokenization, self.grammar))
+                        logic_forms += parses
+                    except:
+                        continue
+                semantic_counts = {}
+                if len(logic_forms):
+                    semantic_counts = {}
+                    for parse in logic_forms:
+                        semantic_repr = utils.create_semantic_repr(parse)
+                        if semantic_repr:
+                            if semantic_repr in semantic_counts:
+                                semantic_counts[semantic_repr] += 1
+                            else:
+                                semantic_counts[semantic_repr] = 1
                     
-        #             if len(semantic_counts) > 1:
-        #                 semantic_counts = utils.check_clauses_in_parse_filter(semantic_counts)
+                    if len(semantic_counts) > 1:
+                        semantic_counts = utils.check_clauses_in_parse_filter(semantic_counts)
 
-        #         self.loaded_data[i].semantic_counts = semantic_counts
+                self.loaded_data[i].semantic_counts = semantic_counts
 
-        #         labeling_functions = {}
-        #         if len(semantic_counts):
-        #             for key in semantic_counts:
-        #                 labeling_function = utils.create_labeling_function(key)
-        #                 if labeling_function:
-        #                     try:
-        #                         if labeling_function(datapoint.sentence): # filtering out labeling functions that don't even apply on their own datapoint
-        #                             labeling_functions[key] = labeling_function
-        #                     except:
-        #                         continue                                    
+                labeling_functions = {}
+                if len(semantic_counts):
+                    for key in semantic_counts:
+                        labeling_function = utils.create_labeling_function(key)
+                        if labeling_function:
+                            try:
+                                if labeling_function(datapoint.sentence): # filtering out labeling functions that don't even apply on their own datapoint
+                                    labeling_functions[key] = labeling_function
+                            except:
+                                continue                                    
 
-        #         self.loaded_data[i].labeling_functions = labeling_functions
+                self.loaded_data[i].labeling_functions = labeling_functions
 
-        #     if verbose:
-        #         if i > 0 and i % cut_off == 0:
-        #             print("Parser: 20% more explanations parsed")
+            if verbose:
+                if i > 0 and i % cut_off == 0:
+                    print("Parser: 20% more explanations parsed")
         
         # with open("loaded_data.p", "wb") as f:
         #     dill.dump(self.loaded_data, f)
         
-        with open("loaded_data.p", "rb") as f:
-            self.loaded_data = dill.load(f)
+        # with open("loaded_data.p", "rb") as f:
+        #     self.loaded_data = dill.load(f)
         
     def matrix_filter(self, unlabeled_data, task="re"):
         """
-        Version of BabbleLabbel's filter bank concept. Label Functions that don't apply to the original
-        sentence that the explanation was written about have already been filtered out in build_labeling_rules.
+            Version of BabbleLabbel's filter bank concept. Label Functions that don't apply to the original
+            sentence that the explanation was written about have already been filtered out in build_labeling_rules.
 
-        Filters out all functions that apply to more than high_end_filter_pct of datapoints
-        Filters out all functions that don't apply to more than n number of datapoints
+            Filters out all functions that apply to more than high_end_filter_pct of datapoints
+            Filters out all functions that don't apply to more than n number of datapoints
 
-        For functions with the same output signature on the datapoints, we pick the first one, and filter out
-        the rest.
+            For functions with the same output signature on the datapoints, we pick the first one, and filter out
+            the rest.
 
-        The remaining functions are then stored alongside their labels.
+            The remaining functions are then stored alongside their labels.
         """
         labeling_functions = []
         semantic_reps = []
@@ -313,13 +312,13 @@ class CCGParserTrainer():
             params             (dict) : dictionary holding hyperparameters for training
             parser (TrainedCCGParser) : a TrainedCCGParser instance
     """
-    def __init__(self, task, explanation_file, unlabeled_data_file="", unlabeled_data=None):
+    def __init__(self, task, explanation_file="", unlabeled_data_file="", unlabeled_data=None, explanation_data=None):
         self.params = {}
         self.params["explanation_file"] = explanation_file
         self.params["unlabeled_data_file"] = unlabeled_data_file
         self.params["task"] = task
         # Temporary until data coming in standard
-        if task == "ec":
+        if task == "sa":
             self.text_key = "tweet"
             self.exp_key = "explanation"
             self.label_key = "label"
@@ -329,10 +328,14 @@ class CCGParserTrainer():
             self.label_key = "label"
         self.parser = TrainedCCGParser()
         self.unlabeled_data = unlabeled_data if unlabeled_data != None else []
+        self.explanation_data = explanation_data
     
     def load_data(self, path):
-        with open(path) as f:
-            data = json.load(f)
+        if len(path):
+            with open(path) as f:
+                data = json.load(f)
+        else:
+            data = self.explanation_data
         
         processed_data = []
         for dic in data:
@@ -346,20 +349,20 @@ class CCGParserTrainer():
         self.parser.load_data(processed_data)
     
     def prepare_unlabeled_data(self, path=""):
-        # if len(self.unlabeled_data) == 0 :
-        #     with open(path) as f:
-        #         data = json.load(f)
-        # else:
-        #     data = self.unlabeled_data
-        #     self.unlabeled_data = []
-        # for entry in data:
-        #     phrase_for_text = utils.generate_phrase(entry, nlp)
-        #     self.unlabeled_data.append(phrase_for_text)
+        if len(self.unlabeled_data) == 0 :
+            with open(path) as f:
+                data = json.load(f)
+        else:
+            data = self.unlabeled_data
+            self.unlabeled_data = []
+        for entry in data:
+            phrase_for_text = utils.generate_phrase(entry, nlp)
+            self.unlabeled_data.append(phrase_for_text)
         
         # with open("training_phrases.p", "wb") as f:
         #     pickle.dump(self.unlabeled_data, f)
-        with open("training_phrases.p", "rb") as f:
-            self.unlabeled_data = pickle.load(f)
+        # with open("training_phrases.p", "rb") as f:
+        #     self.unlabeled_data = pickle.load(f)
 
     def train(self, matrix_filter=False, build_soft_functions=True, verbose=True):
         self.load_data(self.params["explanation_file"])

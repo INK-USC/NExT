@@ -48,14 +48,14 @@ class Phrase():
         self.subj_posi = subj_posi
         self.obj_posi = obj_posi
         self.sentence = tokens_to_string(tokens)
-        if subj_posi != None:
+        if subj_posi < self.tokens:
             self.subj = self.tokens[self.subj_posi]
         else:
-            self.subj = None
-        if obj_posi != None:
+            self.subj = ""
+        if obj_posi < self.tokens:
             self.obj = self.tokens[self.obj_posi]
         else:
-            self.obj = None
+            self.obj = ""
     
     def get_mid(self):
         if self.subj_posi != None and self.obj_posi != None:

@@ -200,6 +200,9 @@ def chunk_explanation(cleaned_explanation, nlp):
     return final_tokens
 
 def clean_and_chunk(explanation, nlp):
+    """
+        Wrapper function
+    """
     return chunk_explanation(clean_explanation(explanation), nlp)
 
 def prepare_token_for_rule_addition(token, reverse=False):
@@ -235,6 +238,8 @@ def add_rules_to_grammar(tokens, grammar_string):
         Arguments:
             tokens         (arr) : tokens that require new rules to be added to the grammar
             grammar_string (str) : string representation of the base grammar to add to
+        Returns:
+            str : updated grammar_string
     """
     grammar = grammar_string
     for token in tokens:
@@ -255,7 +260,7 @@ def generate_phrase(sentence, nlp):
             sentence    (str) : sentence to generate wrapper for
             nlp (spaCy model) : pre-loaded spaCy model to use for NER detection
         
-        Returns
+        Returns:
             Phrase : useful wrapper object
     """
     if "SUBJ" in sentence and "OBJ" in sentence:
@@ -274,19 +279,22 @@ def generate_phrase(sentence, nlp):
 
     doc = nlp(sentence)
     ners = [token.ent_type_ if token.text not in ["SUBJ", "OBJ"] else "" for token in doc]
-    tokens = [token.text for token in doc]
-    subj_posi = None
-    obj_posi = None
+    tokens = [token.text.lower() for token in doc]
+    # soft matching functions depend on these values, so if no SUBJ or OBJ exist
+    # I want the function to error, as an inappropriate explanation was created
+    # for the dataset being parsed, hence 2*len(tokens) as tokens[subj_posi] will always error
+    subj_posi = 2*len(tokens)
+    obj_posi = 2*len(tokens)
     indices_to_pop = []
     for i, token in enumerate(tokens):
-        if token == "SUBJ":
-            if subj_posi:
+        if token == "subj":
+            if subj_posi < len(tokens):
                 indices_to_pop.append(i)
             else:
                 subj_posi = i
                 ners[i] = subj_type
-        elif token == "OBJ":
-            if obj_posi:
+        elif token == "obj":
+            if obj_posi < len(tokens):
                 indices_to_pop.append(i)
             else:
                 obj_posi = i
@@ -301,6 +309,23 @@ def generate_phrase(sentence, nlp):
     return util_classes.Phrase(tokens, ners, subj_posi, obj_posi)
 
 def parse_tokens(one_sent_tokenize, raw_lexicon):
+    """
+        CYK algorithm for parsing a tokenized sentence into a parse tree. We implement our own, as solely
+        using NLTK's CCGChartParser and the grammar we came up won't allow for the parses we desired. As
+        we are not linguists, we found it easier to change the code than figure out possible problems with
+        our grammar.
+
+        Outputs the last row of the CYK datastructure as possible parses for the sentence
+            * Each element in the row is string version of nltk.tree.Tree (sort of, we actually construct our
+              own tree based on the tree provided by NLTK)
+
+        Arguments:
+            one_sent_tokenize (arr) : array of string tokens representing a sentence
+            raw_lexicon       (str) : string representation of lexicon (grammar and vocabulary rep of a language)
+        
+        Returns:
+            (arr) : list of possible parses, read comment above for more
+    """
     try:
         beam_lexicon = copy.deepcopy(raw_lexicon)
         CYK_form = [[[token] for token in one_sent_tokenize]]
@@ -334,8 +359,6 @@ def parse_tokens(one_sent_tokenize, raw_lexicon):
                                         sem_temp.append(str(sem)+'_'+str(categ))
                             except:
                                 pass
-                # form = sorted(form,key=lambda s:np.dot(self.get_feature(s[0]).transpose(),self.theta)[0,0],reverse=True)
-                # form = form[:min(len(form),beam_width)]
                 add_form = []
                 for elem in form:
                     parse, word_name, entry,sem_ = elem
@@ -349,8 +372,26 @@ def parse_tokens(one_sent_tokenize, raw_lexicon):
     except:
         return []
 
-def create_semantic_repr_ziqi(semantic_rep):
-    # Possible clause delimiter
+def create_semantic_repr(semantic_rep):
+    """
+        Given a semtantic string representation of a parse tree we transform the tree into a hierarchical
+        structure, so that a conversion to a labeling function is possible; functions at the top rely on the 
+        return value of functions lower down.
+        In doing this, we loose the original lexical heirachy of the parse tree.
+        
+        This differs from this approach https://homes.cs.washington.edu/~lsz/papers/zc-uai05.pdf
+        We can't create features based on lexical structure, but only semantic structure
+        If the semantic string representation of the tree makes sense when considering the ordering
+        of the functions making up the string, then we output the hierarchical tuple, else we return
+        false. False here indicates that while a valid parse tree was attainable, the semantics of the
+        parse do not make sense though.
+
+        Arguments:
+            semantic_rep (str) :  tree representation of tree from our parse_tokens function
+        
+        Returns:
+            tuple | false : if valid semantically, we output a tuple describing the semantics, else false
+    """
     clauses = re.split(',|(\\()',semantic_rep)
     delete_index = []
     for i in range(len(clauses)-1, -1, -1):
@@ -358,9 +399,7 @@ def create_semantic_repr_ziqi(semantic_rep):
             delete_index.append(i)
     for i in delete_index:
         del clauses[i]
-    
-    # pdb.set_trace()
-    
+        
     # Switch poisition of ( and Word before it
     switched_semantics = []
     for i, token in enumerate(clauses):
@@ -369,7 +408,6 @@ def create_semantic_repr_ziqi(semantic_rep):
         else:
             switched_semantics.append(token)
     
-    # pdb.set_trace()
     # Converting semantic string into a multi-level tuple, ex: (item, tuple) would be a two level tuple
     # This representation allows for the conversion from semantic representation to labeling function
     hierarchical_semantics = ""
@@ -385,12 +423,9 @@ def create_semantic_repr_ziqi(semantic_rep):
             else:
                 posi = len(prepped_clause)-1
                 assert prepped_clause[posi] == "\""
-            # print(prepped_clause)
             prepped_clause = prepped_clause[0] + \
                              prepped_clause[1:posi].replace('\'','\\\'') + \
                              prepped_clause[posi:]
-            # print(prepped_clause[1:posi])
-            # print(prepped_clause)
 
         if switched_semantics[i-1] != "(" and len(hierarchical_semantics):
             hierarchical_semantics += ","
@@ -401,112 +436,66 @@ def create_semantic_repr_ziqi(semantic_rep):
     # else we return False
     try:
         hierarchical_tuple = ('.root', eval(hierarchical_semantics))
-#     # print("cool")
-#     # print(hierarchical_tuple)
         return hierarchical_tuple
     except:
         return False
 
-def create_semantic_repr(parse_tree):
+def _detect_semantic_token(semantic_repr, token):
+    """ Exists solely for documentation purposes """
+    return token in semantic_repr
+
+def _count_correct_between_parses(semantic_repr):
     """
-        Given a valid parse tree, we extract the semtantic string representation of the tree.
-        In order to execute the functions that make up the semantic string, we create a hierarchical
-        representation of the string, so that functions that rely on the return value of functions
-        lower down the in the representation can be evaluated.
-        In doing this, we loose the original lexical heirachy of the parse tree.
-        Differs from this approach https://homes.cs.washington.edu/~lsz/papers/zc-uai05.pdf
-        Meaning that we can't create features based on lexical structure, but only semantic structure
-        If the semantic string representation of the tree makes sense when considering the ordering
-        of the functions making up the string, then we output the hierarchical tuple, else we return
-        false. False here indicates that while a valid parse tree was attainable, the semantics of the
-        parse do not make sense.
-        Arguments:
-            parse_tree (nltk.tree.Tree (result of CCGChartParser.parse())) : tree to convert to semantic
-                                                                             representation
+        One flaw in the grammar is the parsing of between statements, so this function counts the number
+        of correct between statements in a parse.
+
+        Returns:
+            semantic_repr (str) : str rep of semantic representation of a parse (output of create_semantic_repr)
         
         Returns:
-            tuple | false : if valid semantically, we output a tuple describing the semantics, else false
+            int : number of correct between parses
     """
-    # pdb.set_trace()
-    full_semantics = str(parse_tree.label()[0].semantics())
-    # Possible clause delimiter
-    clauses = re.split(',|(\\()',full_semantics)
-    delete_index = []
-    for i in range(len(clauses)-1, -1, -1):
-        if clauses[i] == None:
-            delete_index.append(i)
-    for i in delete_index:
-        del clauses[i]
-    
-    # pdb.set_trace()
-    
-    # Switch poisition of ( and Word before it
-    switched_semantics = []
-    for i, token in enumerate(clauses):
-        if token=='(':
-            switched_semantics.insert(-1,'(')
-        else:
-            switched_semantics.append(token)
-    
-    # pdb.set_trace()
-    # Converting semantic string into a multi-level tuple, ex: (item, tuple) would be a two level tuple
-    # This representation allows for the conversion from semantic representation to labeling function
-    hierarchical_semantics = ""
-    for i, clause in enumerate(switched_semantics):
-        prepped_clause = clause
-        if prepped_clause.startswith("\""):
-            prepped_clause = prepare_token_for_rule_addition(prepped_clause, reverse=True)
-            if prepped_clause.endswith(")"):
-                posi = len(prepped_clause)-1
-                while prepped_clause[posi]==")":
-                    posi-=1
-                assert prepped_clause[posi]=="\'"
-            else:
-                posi = len(prepped_clause)-1
-                assert prepped_clause[posi] == "\'"
-            # print(prepped_clause)
-            prepped_clause = prepped_clause[0] + \
-                             prepped_clause[1:posi].replace('\'','\\\'') + \
-                             prepped_clause[posi:]
-            # print(prepped_clause[1:posi])
-            # print(prepped_clause)
-
-        if switched_semantics[i-1] != "(" and len(hierarchical_semantics):
-            hierarchical_semantics += ","
-
-        hierarchical_semantics += prepped_clause
-    # pdb.set_trace()
-    # if the ordering of the semantics in this semantic representation is acceptable per the functions
-    # the semantics map to, then we will be able to create the desired multi-label tuple
-    # else we return False
-    # print(hierarchical_semantics)
-    try:
-        hierarchical_tuple = ('.root', eval(hierarchical_semantics))
-    # print("cool")
-    # print(hierarchical_tuple)
-        return hierarchical_tuple
-    except:
-        return False
-
-def _detect_semantic_token(semantic_tree, token):
-    return token in semantic_tree
-
-def _count_correct_between_parses(semantic_tree):
     correct_between_clauses = ["('@between', ('@And', 'ArgY', 'ArgX'))", 
                                "('@between', ('@And', 'ArgX', 'ArgY'))"]
         
-    count = semantic_tree.count(correct_between_clauses[0]) + \
-            semantic_tree.count(correct_between_clauses[1])
+    count = semantic_repr.count(correct_between_clauses[0]) + \
+            semantic_repr.count(correct_between_clauses[1])
     
     return count
 
-def _count_correct_num_parses(semantic_tree):
-    num_regex = "\('\@Num', '[0-9]+', 'tokens'\)"
-    count = len(re.findall(num_regex, semantic_tree))
+def _count_correct_num_parses(semantic_repr):
+    """
+        Another flaw in the grammar is the parsing of counting the number of tokens between phrases and/or
+        anchor words, so this function counts the number of correct "number statements" in a parse.
+
+        Returns:
+            semantic_repr (str) : str rep of semantic representation of a parse (output of create_semantic_repr)
+        
+        Returns:
+            int : number of correct number parses
+    """
+    num_regex = r"\('\@Num', '[0-9]+', 'tokens'\)"
+    count = len(re.findall(num_regex, semantic_repr))
     
     return count
 
 def check_clauses_in_parse_filter(semantic_counts):
+    """
+        The parse function sometimes creates incorrect parses due to problems in our grammar. For at least
+        the most common errors in our grammars, between and Num clauses, we check for the number of correct
+        clause parses within a larger parse and select the larger parse with the max number. We only do this
+        filtering if we detect the existence of between or Num clauses. In the event of a tie we just take
+        the first seen one.
+
+        Returns:
+            semantic_counts (dict) : tuple - semantic representation of a parse (output of create_semantic_repr),
+                                     value - number of times the parse was produced by our parse function
+
+        Returns:
+            dict :  key - string version of the semantic representation of a parse,
+                    value - number of times the parse was produced by our parse function
+                    ^- filtered though if applicable
+    """
     contains_between_clause = False
     contains_num_clause = False
     for key in semantic_counts:
@@ -544,19 +533,13 @@ def create_labeling_function(semantic_repr, level=0):
             function | false : if a function is creatable via the tuple, it is created, else false
     """
     try:
-    # print("level {}".format(level))
         if isinstance(semantic_repr, tuple):
-            # print("function name {}".format(semantic_repr[0]))
             op = constants.STRICT_MATCHING_OPS[semantic_repr[0]]
-            # print("function {}".format(op))
             args = [create_labeling_function(arg, level=level+1) for arg in semantic_repr[1:]]
-            # print("level {}".format(level))
-            # print("args {}".format(args))
             if False in args:
                 return False
             return op(*args) if args else op
         else:
-            # print("semantic_repr {}".format(semantic_repr))
             if semantic_repr in constants.NER_TERMINAL_TO_EXECUTION_TUPLE:
                 return constants.NER_TERMINAL_TO_EXECUTION_TUPLE[semantic_repr]
             else:

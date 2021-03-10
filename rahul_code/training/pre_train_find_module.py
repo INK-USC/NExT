@@ -107,12 +107,12 @@ def main():
                                                   args.explanation_data_path, embedding_name=args.embeddings,
                                                   sample_rate=sample_rate, dataset=dataset)
 
-    save_string = generate_save_string(args.embeddings, sample=sample_rate)
+    save_string = generate_save_string(dataset, args.embeddings, sample=sample_rate)
 
     with open("../data/pre_train_data/train_data_{}.p".format(save_string), "rb") as f:
         train_dataset = pickle.load(f)
     
-    primary_eval_path = "../data/pre_train_data/{}_rq_data_{}.p".format(dataset, save_string)
+    primary_eval_path = "../data/pre_train_data/rq_data_{}.p".format(save_string)
     
     # optional secondary eval, can set this to the empty string
     secondary_eval_path = "../data/pre_train_data/dev_data_{}.p".format(save_string)
@@ -130,8 +130,8 @@ def main():
     else:
         device = torch.device("cpu")
     
-    tacred_vocab = build_custom_vocab("tacred", len(vocab))
-    custom_vocab_length = len(tacred_vocab)
+    custom_vocab = build_custom_vocab(dataset, len(vocab))
+    custom_vocab_length = len(custom_vocab)
 
     model = Find_Module.Find_Module(emb_weight=vocab.vectors, padding_idx=pad_idx, emb_dim=args.emb_dim,
                                     hidden_dim=args.hidden_dim, cuda=torch.cuda.is_available(),

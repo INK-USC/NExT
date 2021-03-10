@@ -1,4 +1,3 @@
-# FILE NEEDS TO BE UPDATED TO TAKE INTO ACCOUNT NEW TACRED STRATEGY
 import sys
 sys.path.append(".")
 sys.path.append("../")
@@ -122,7 +121,7 @@ def build_variable_length_text_pre_training_dataset(data, vocab, split_name, sav
         pickle.dump(dataset, f)
 
 
-def build_query_dataset(explanation_data, vocab, label_filter, save_string):
+def tokenize_explanation_queries(explanation_data, vocab, label_filter, save_string):
     """
         Given a list of explanations for labeling decisions, we find those explanations that include phrases
         that must exist in a text-sequence for a label to be applied to the text sequence.
@@ -160,7 +159,7 @@ def build_query_dataset(explanation_data, vocab, label_filter, save_string):
     with open(file_name, "wb") as f:
         pickle.dump({"queries" : tokenized_queries, "labels" : labels}, f)
 
-def build_real_query_dataset(explanation_data, vocab, label_filter, dataset_name, save_string, custom_vocab={}):
+def build_real_query_eval_dataset(explanation_data, vocab, label_filter, dataset_name, save_string, custom_vocab={}):
     """
         As an evaluation set, we take an real natural language explanation and check if it has a
         quoted phrase in it. If it does, then we build an evaluation based on the sentence the 
@@ -194,14 +193,14 @@ def build_real_query_dataset(explanation_data, vocab, label_filter, dataset_name
     
     eval_dataset_2 = PreTrainingFindModuleDataset(tokenized_sentences, tokenized_queries, labels, vocab["<pad>"])
 
-    file_name = "../data/pre_train_data/{}_rq_data_{}.p".format(dataset_name, save_string)
+    file_name = "../data/pre_train_data/rq_data_{}.p".format(save_string)
 
     with open(file_name, "wb") as f:
         pickle.dump(eval_dataset_2, f)
 
-def build_pre_train_find_datasets(file_path, explanation_path, embedding_name="glove.840B.300d",
-                                  random_state=42, label_filter=None, sample_rate=0.1,
-                                  dataset="tacred"):
+def build_pre_train_find_datasets(text_data, explanation_data, save_string, embedding_name="glove.840B.300d",
+                                  random_state=42, dataset="tacred", sample_rate=-1.0,
+                                  label_filter=None):
     """
         As per the NExT paper, we build train, dev and test datasets to allow for the pre-training and
         evaluation of the FIND module.
@@ -209,14 +208,14 @@ def build_pre_train_find_datasets(file_path, explanation_path, embedding_name="g
         Steps taken:
             1. Load unlabeled data
             2. If only a sample of the data is to be used, we sample the data
-            3. Split data into train, dev, and test splits
+            3. Split data into train and dev splits
             4. Build a vocabulary object using the train split
             5. Build needed datasets for computing L_find loss (for each split)
             6. Build needed datasets for computing L_sim loss
         
         Arguments:
-            file_path        (str) : path to unlabeled data
-            explanation_path (str) : path to explanation data
+            text_data        (arr) : array of text data
+            explanation_data (arr) : array of dictionaries holding explanaiton data
             embedding_name   (str) : name of pre-trained embeddings being used in vocab
             random_state     (int) : random seed to use when splitting data into train, dev, test splits
             label_filter     (arr) : labels to consider when extracting queries from explanations
@@ -229,33 +228,23 @@ def build_pre_train_find_datasets(file_path, explanation_path, embedding_name="g
         print("Not Valid Embedding Option")
         return
     
-    with open(file_path) as f:
-        text_data = json.load(f)
-        text_data = [entry["text"] for entry in text_data]
-    
     if sample_rate > 0:
         sample_number = int(len(text_data) * sample_rate)
         text_data = random.sample(text_data, sample_number)
     
     train, dev = train_test_split(text_data, train_size=0.8, random_state=random_state)
-    dev, test = train_test_split(dev, train_size=0.5, random_state=random_state)
-
-    save_string = generate_save_string(embedding_name, random_state=random_state, sample=sample_rate)
 
     vocab = build_vocab(train, embedding_name, save_string)
 
-    build_variable_length_text_pre_training_dataset(train, vocab, "train", save_string)
+    custom_vocab = build_custom_vocab(dataset, vocab_length=len(vocab))
 
-    build_variable_length_text_pre_training_dataset(dev, vocab, "dev", save_string)
+    build_variable_length_text_pre_training_dataset(train, vocab, "train", save_string, custom_vocab)
 
-    build_variable_length_text_pre_training_dataset(test, vocab, "test", save_string)
+    build_variable_length_text_pre_training_dataset(dev, vocab, "dev", save_string, custom_vocab)
 
-    with open(explanation_path) as f:
-        explanation_data = json.load(f)
+    tokenize_explanation_queries(explanation_data, vocab, label_filter, save_string)
 
-    build_query_dataset(explanation_data, vocab, label_filter, save_string)
-
-    build_real_query_dataset(explanation_data, vocab, label_filter, dataset, save_string)
+    build_real_query_eval_dataset(explanation_data, vocab, label_filter, dataset, save_string, custom_vocab)
 
 def build_pre_train_find_datasets_from_splits(train_path, dev_path, test_path, explanation_path,
                                               embedding_name="glove.840B.300d", label_filter=None, sample_rate=-1.0,
@@ -286,80 +275,35 @@ def build_pre_train_find_datasets_from_splits(train_path, dev_path, test_path, e
         sample_number = int(len(train) * sample_rate)
         train_sample = random.sample(train, sample_number)
     
-    save_string = generate_save_string(embedding_name, sample=sample_rate)
+    save_string = generate_save_string(dataset, embedding_name, sample=sample_rate)
 
     vocab = build_vocab(train, embedding_name, save_string)
 
-    tacred_vocab = build_custom_vocab(dataset="tacred", vocab_length=len(vocab))
+    custom_vocab = build_custom_vocab(dataset, vocab_length=len(vocab))
 
     if train_sample:
-        build_variable_length_text_pre_training_dataset(train_sample, vocab, "train", save_string, tacred_vocab)
+        build_variable_length_text_pre_training_dataset(train_sample, vocab, "train", save_string, custom_vocab)
     else:
-        build_variable_length_text_pre_training_dataset(train, vocab, "train", save_string, tacred_vocab)
+        build_variable_length_text_pre_training_dataset(train, vocab, "train", save_string, custom_vocab)
 
     with open(dev_path) as f:
         dev = json.load(f)
         dev = [ent["text"] for ent in dev]
 
-    build_variable_length_text_pre_training_dataset(dev, vocab, "dev", save_string, tacred_vocab)
+    build_variable_length_text_pre_training_dataset(dev, vocab, "dev", save_string, custom_vocab)
 
     with open(test_path) as f:
         test = json.load(f)
         test = [ent["text"] for ent in test]
     
-    build_variable_length_text_pre_training_dataset(test, vocab, "test", save_string, tacred_vocab)
+    build_variable_length_text_pre_training_dataset(test, vocab, "test", save_string, custom_vocab)
 
     with open(explanation_path) as f:
         explanation_data = json.load(f)
 
-    build_query_dataset(explanation_data, vocab, label_filter, save_string)
+    tokenize_explanation_queries(explanation_data, vocab, label_filter, save_string)
 
-    build_real_query_dataset(explanation_data, vocab, label_filter, dataset, save_string, tacred_vocab)
-
-def build_pre_train_find_datasets_ziqi(train_path, explanation_path, embedding_name="glove.840B.300d",
-                                       label_filter=None, train_count=40000, test_count=2000, dataset="tacred"):
-    """
-        Following Conversations with Ziqi (original author), prepping data in a new way
-
-        Arguments:
-            train_path       (str) : path to training split of data
-            explanation_path (str) : path to explanation data
-            embedding_name   (str) : name of pre-trained embeddings being used in vocab
-            label_filter     (arr) : labels to consider when extracting queries from explanations
-                                     (allows user to ignore explanations associated with certain labels)
-            train_count      (int) : how much of the train data should be used for training
-            test_count       (int) : how much of the train data should be used for eval
-            dataset          (str) : name of the dataset explanations come from
-    """
-
-    with open(train_path) as f:
-        train = json.load(f)
-        train = [entry["text"] for entry in train]
-    
-    eval_data = train[:test_count]
-
-    train_data = train[test_count:test_count+train_count]
-
-    train_sample = random.sample(train_data, int(len(train_data)*0.1))
-    
-    # abusing sample a bit, but it will work
-    save_string = generate_save_string(embedding_name, sample="ziqi")
-
-    vocab = build_vocab(train, embedding_name, save_string)
-    
-    build_variable_length_text_pre_training_dataset(train_data, vocab, "train", save_string)
-
-    build_variable_length_text_pre_training_dataset(eval_data, vocab, "ziqi_test_1", save_string)
-
-    build_variable_length_text_pre_training_dataset(train_sample, vocab, "train_test", save_string)
-
-    with open(explanation_path) as f:
-        explanation_data = json.load(f)
-    
-    
-    build_query_dataset(explanation_data, vocab, label_filter, save_string)
-
-    build_real_query_dataset(explanation_data, vocab, label_filter, dataset, save_string)
+    build_real_query_eval_dataset(explanation_data, vocab, label_filter, dataset, save_string, custom_vocab)
 
 def evaluate_find_module(data_path, act_queries, query_index_matrix, neg_query_index_matrix, lower_bound,
                          model, find_loss_fn, sim_loss_fn, batch_size=128, gamma=0.5):

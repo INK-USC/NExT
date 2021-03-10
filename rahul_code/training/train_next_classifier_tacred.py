@@ -4,11 +4,12 @@ import torch
 import sys
 sys.path.append(".")
 sys.path.append("../")
-from training.train_util_functions import batch_type_restrict, build_phrase_input, build_mask_mat_for_batch,\
-                                   set_tacred_ner_label_space, build_datasets_from_splits, evaluate_next_clf
-from training.util_functions import similarity_loss_function, generate_save_string, build_custom_vocab
+from training.train_util_functions import batch_type_restrict_re, build_phrase_input, build_mask_mat_for_batch,\
+                                          build_datasets_from_splits, evaluate_next_clf
+from training.util_functions import similarity_loss_function, generate_save_string, build_custom_vocab,\
+                                    set_re_dataset_ner_label_space
 from training.util_classes import BaseVariableLengthDataset
-from training.constants import TACRED_LABEL_MAP, FIND_MODULE_HIDDEN_DIM
+from training.constants import TACRED_LABEL_MAP, FIND_MODULE_HIDDEN_DIM, TACRED_ENTITY_TYPES, TACRED_NERS
 from models import BiLSTM_Att_Clf, Find_Module
 import pickle
 from tqdm import tqdm
@@ -45,10 +46,6 @@ def main():
                         type=str,
                         default="../data/saved_models/Find-Module-pt_official.p",
                         help="Path to pretrained find module")
-    # parser.add_argument("--l_sim_data_path",
-    #                     type=str,
-    #                     default="../data/pre_train_data/sim_data_glove.840B.300d_-1_0.6.p",
-    #                     help="Path to l_sim data for Find module")
     parser.add_argument("--vocab_path",
                         type=str,
                         default="../data/vocabs/vocab_glove.840B.300d_-1_0.6.p",
@@ -85,10 +82,6 @@ def main():
                         type=float,
                         default=0.7,
                         help="weight of soft_matching_loss")
-    parser.add_argument('--beta',
-                        type=float,
-                        default=0.5,
-                        help="weight of sim_loss")
     parser.add_argument('--emb_dim',
                         type=int,
                         default=300,
@@ -122,15 +115,17 @@ def main():
     random.seed(args.seed)
     lower_bound = -20.0
     dataset = "tacred"
-    save_string = generate_save_string(args.embeddings)
-
-    if dataset == "tacred":
-        set_tacred_ner_label_space()
-        number_of_classes = len(TACRED_LABEL_MAP)
+    save_string = generate_save_string(dataset, args.embeddings)
+    number_of_classes = len(TACRED_LABEL_MAP)
+    none_label_id = TACRED_LABEL_MAP["no_relation"]
+    set_re_dataset_ner_label_space(dataset, TACRED_NERS)
+    task = "re"
+    relation_ner_types = TACRED_ENTITY_TYPES
 
     if args.build_data:
        build_datasets_from_splits(args.train_path, args.dev_path, args.test_path, args.vocab_path,
-                                  args.explanation_data_path, save_string, dataset=dataset)
+                                  TACRED_LABEL_MAP, args.explanation_data_path, save_string,
+                                  task=task, dataset=dataset)
 
     with open("../data/training_data/unlabeled_data_{}.p".format(save_string), "rb") as f:
         unlabeled_data = pickle.load(f)
@@ -140,9 +135,6 @@ def main():
     
     with open(args.vocab_path, "rb") as f:
         vocab = pickle.load(f)
-    
-    # with open(args.l_sim_data_path, "rb") as f:
-    #     sim_data = pickle.load(f)
     
     with open("../data/training_data/labeling_functions_{}.p".format(save_string), "rb") as f:
         soft_labeling_functions_dict = dill.load(f)
@@ -163,8 +155,8 @@ def main():
     else:
         device = torch.device("cpu")
     
-    tacred_vocab = build_custom_vocab("tacred", len(vocab))
-    custom_vocab_length = len(tacred_vocab)
+    custom_vocab = build_custom_vocab("tacred", len(vocab))
+    custom_vocab_length = len(custom_vocab)
     
     find_module = Find_Module.Find_Module(vocab.vectors, pad_idx, args.emb_dim, FIND_MODULE_HIDDEN_DIM,
                                           torch.cuda.is_available(), custom_token_count=custom_vocab_length)
@@ -172,7 +164,8 @@ def main():
     find_module.load_state_dict(torch.load(args.find_module_path))
 
     clf = BiLSTM_Att_Clf.BiLSTM_Att_Clf(vocab.vectors, pad_idx, args.emb_dim, args.hidden_dim,
-                                        torch.cuda.is_available(), number_of_classes, custom_token_count=custom_vocab_length)
+                                        torch.cuda.is_available(), number_of_classes,
+                                        custom_token_count=custom_vocab_length)
     
     del vocab
 
@@ -213,31 +206,6 @@ def main():
     # Get queries ready for Find Module
     lfind_query_tokens, _ = BaseVariableLengthDataset.variable_length_batch_as_tensors(tokenized_queries, pad_idx)
     lfind_query_tokens = lfind_query_tokens.to(device).detach()
-
-    # Get L_sim Data ready
-    # lsim_query_tokens = BaseVariableLengthDataset.variable_length_batch_as_tensors(sim_data["queries"], pad_idx)
-    # lsim_query_tokens = lsim_query_tokens.to(device)
-    # query_labels = sim_data["labels"]
-    
-    # queries_by_label = {}
-    # for i, label in enumerate(query_labels):
-    #     if label in queries_by_label:
-    #         queries_by_label[label][i] = 1
-    #     else:
-    #         queries_by_label[label] = [0] * len(query_labels)
-    #         queries_by_label[label][i] = 1
-    
-    # query_index_matrix = []
-    # for i, label in enumerate(query_labels):
-    #     query_index_matrix.append(queries_by_label[label][:])
-    
-    # query_index_matrix = torch.tensor(query_index_matrix)
-    # neg_query_index_matrix = 1 - query_index_matrix
-    # for i, row in enumerate(neg_query_index_matrix):
-    #     neg_query_index_matrix[i][i] = 1
-
-    # query_index_matrix = query_index_matrix.to(device)
-    # neg_query_index_matrix = neg_query_index_matrix.to(device)
 
     # Preping Soft Labeling Function Data
     soft_labeling_functions = soft_labeling_functions_dict["function_pairs"]
@@ -285,7 +253,7 @@ def main():
             unlabeled_tokens, unlabeled_token_lengths, phrases = unlabeled_data_batch
             unlabeled_tokens = unlabeled_tokens.to(device)
 
-            phrase_input = build_phrase_input(phrases, pad_idx).to(device).detach()
+            phrase_input = build_phrase_input(phrases, pad_idx, task).to(device).detach()
             _, seq_length = unlabeled_tokens.shape
             mask_mat = build_mask_mat_for_batch(seq_length).to(device).detach()
 
@@ -302,7 +270,8 @@ def main():
                         batch_scores = func(lfind_output, quoted_words_to_index, mask_mat)(phrase_input).detach() # 1 x B
                     except:
                         batch_scores = torch.zeros((1, args.unlabeled_batch_size)).to(device).detach()
-                    type_restrict_multiplier = batch_type_restrict(rel, phrase_input).detach() # 1 x B
+                    
+                    type_restrict_multiplier = batch_type_restrict_re(rel, phrase_input, relation_ner_types).detach() # 1 x B
                     final_scores = batch_scores * type_restrict_multiplier # 1 x B
                     function_batch_scores.append(final_scores)
             
@@ -347,17 +316,15 @@ def main():
         print("Avg Train Total Loss: {}, Avg Train Strict Loss: {}, Avg Train Soft Loss: {}, Avg Train Sim Loss: {}".format(*loss_tuples))
         
         loss_per_epoch.append((train_avg_loss, train_avg_strict_loss, train_avg_soft_loss))
-
-        no_relation_key = "no_relation"
         
         train_path = "../data/training_data/{}_data_{}.p".format("matched", save_string)
-        train_results = evaluate_next_clf(train_path, clf, strict_match_loss_function, TACRED_LABEL_MAP, batch_size=args.eval_batch_size, no_relation_key=no_relation_key)
+        train_results = evaluate_next_clf(train_path, clf, strict_match_loss_function, number_of_classes, batch_size=args.eval_batch_size, none_label_id=none_label_id)
         avg_loss, avg_train_ent_f1_score, avg_train_val_f1_score, total_train_class_probs, no_relation_thresholds = train_results
         print("Train Results")
         train_tuple = ("%.5f" % avg_loss, "%.5f" % avg_train_ent_f1_score, "%.5f" % avg_train_val_f1_score, str(no_relation_thresholds))
         print("Avg Train Loss: {}, Avg Train Entropy F1 Score: {}, Avg Train Max Value F1 Score: {}, Thresholds: {}".format(*train_tuple))
 
-        dev_results = evaluate_next_clf(dev_path, clf, strict_match_loss_function, TACRED_LABEL_MAP, batch_size=args.eval_batch_size, no_relation_key=no_relation_key)
+        dev_results = evaluate_next_clf(dev_path, clf, strict_match_loss_function, number_of_classes, batch_size=args.eval_batch_size, none_label_id=none_label_id)
         
         avg_loss, avg_dev_ent_f1_score, avg_dev_val_f1_score, total_dev_class_probs, no_relation_thresholds = dev_results
 
@@ -371,9 +338,9 @@ def main():
             best_dev_f1_score = max(avg_dev_ent_f1_score, avg_dev_val_f1_score)
             print("Updated Dev F1 Score")
         
-        test_results = evaluate_next_clf(test_path, clf, strict_match_loss_function, TACRED_LABEL_MAP,\
+        test_results = evaluate_next_clf(test_path, clf, strict_match_loss_function, number_of_classes,\
                                          no_relation_thresholds=no_relation_thresholds,\
-                                         batch_size=args.eval_batch_size, no_relation_key=no_relation_key)
+                                         batch_size=args.eval_batch_size, none_label_id=none_label_id)
         
         avg_loss, avg_test_ent_f1_score, avg_test_val_f1_score, total_test_class_probs, _ = test_results
 
@@ -405,7 +372,7 @@ def main():
     with open("../data/result_data/train_loss_per_epoch_Next-Clf_{}.csv".format(args.experiment_name), "w") as f:
         writer=csv.writer(f)
         writer.writerow(['train_avg_loss', 'train_avg_strict_loss', 'train_avg_soft_loss'])
-        for row in strict_loss_epoch:
+        for row in loss_per_epoch:
             writer.writerow([row])
     
     with open("../data/result_data/dev_f1_per_epoch_Next-Clf_{}.csv".format(args.experiment_name), "w") as f:

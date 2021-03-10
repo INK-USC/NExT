@@ -39,17 +39,20 @@ pretrain_labels = [
 strict_match_labels = [1, 2, 4, 3, 5, 3, 2, 1]
 
 def test_variable_length_batch_as_tensors():
-    padded_tokens = BaseVariableLengthDataset.variable_length_batch_as_tensors(tokens, 0)
+    padded_tokens, token_lengths = BaseVariableLengthDataset.variable_length_batch_as_tensors(tokens, 0)
     assert padded_tokens.shape[0] == 8
     assert padded_tokens.shape[1] == 26
+    assert token_lengths == [10, 6, 12, 13, 19, 26, 17, 19]
     
-    padded_queries = BaseVariableLengthDataset.variable_length_batch_as_tensors(queries, 0)
+    padded_queries, query_lengths = BaseVariableLengthDataset.variable_length_batch_as_tensors(queries, 0)
     assert padded_queries.shape[0] == 8
     assert padded_queries.shape[1] == 5
+    assert query_lengths == [2, 3, 1, 5, 4, 3, 2, 1]
 
-    padded_labels = BaseVariableLengthDataset.variable_length_batch_as_tensors(pretrain_labels, 0.0, torch.float)
+    padded_labels, padding_lengths = BaseVariableLengthDataset.variable_length_batch_as_tensors(pretrain_labels, 0.0, torch.float)
     assert padded_labels.shape[0] == 8
     assert padded_labels.shape[1] == 26
+    assert padding_lengths == [10, 6, 12, 13, 19, 26, 17, 19]
 
 
 def test_pre_train_as_batches_shuffle():
@@ -90,11 +93,14 @@ def test_train_as_batches_no_shuffle():
     dataset = TrainingDataset(tokens, strict_match_labels, 0)
 
     token_lengths = [10, 13, 26, 19]
+    individual_token_lengths = [[10, 6], [12, 13], [19, 26], [17, 19]]
     for i, batch in enumerate(dataset.as_batches(batch_size=2, shuffle=False)):
-        b_tokens, b_labels = batch
+        b_tokens, b_lengths, b_labels = batch
 
         assert b_tokens.shape[0] == 2
         assert b_tokens.shape[1] == token_lengths[i]
+
+        assert b_lengths == individual_token_lengths[i]
 
         assert b_labels.shape[0] == 2
 
@@ -102,10 +108,13 @@ def test_train_as_batches_shuffle_sample():
     dataset = TrainingDataset(tokens, strict_match_labels, 0)
 
     token_lengths = [19, 19]
+    individual_token_lengths = [[19, 17], [12, 19]]
     for i, batch in enumerate(dataset.as_batches(batch_size=2, sample=4)):
-        b_tokens, b_labels = batch
+        b_tokens, b_lengths, b_labels = batch
 
         assert b_tokens.shape[0] == 2
         assert b_tokens.shape[1] == token_lengths[i]
+
+        assert b_lengths == individual_token_lengths[i]
 
         assert b_labels.shape[0] == 2

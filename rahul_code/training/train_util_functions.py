@@ -2,13 +2,14 @@ import pickle
 import json
 import random
 from training.util_functions import generate_save_string, convert_text_to_tokens, tokenize, extract_queries_from_explanations, clean_text, build_vocab, build_custom_vocab
-from training.constants import SPACY_NERS, SPACY_TO_TACRED, TACRED_NERS, TACRED_ENTITY_TYPES, PARSER_TRAIN_SAMPLE, UNMATCH_TYPE_SCORE, TACRED_LABEL_MAP, DEV_F1_SAMPLE
+from training.constants import PARSER_TRAIN_SAMPLE, UNMATCH_TYPE_SCORE, TACRED_LABEL_MAP, DEV_F1_SAMPLE
 from training.util_classes import BaseVariableLengthDataset, UnlabeledTrainingDataset, TrainingDataset
 import sys
+sys.path.append(".")
 sys.path.append("../")
-from CCG_new.soft_grammar_functions import NER_LABEL_SPACE
 from CCG_new.parser import CCGParserTrainer
 from CCG_new.utils import generate_phrase
+from CCG_new.soft_grammar_functions import NER_LABEL_SPACE
 import spacy
 import torch
 import torch.nn as nn
@@ -21,8 +22,8 @@ import numpy as np
 
 nlp = spacy.load("en_core_web_sm")
 
-def batch_type_restrict(relation, phrase_inputs):
-    entity_types = TACRED_ENTITY_TYPES[relation]
+def batch_type_restrict_re(relation, phrase_inputs, relation_ner_types):
+    entity_types = relation_ner_types[relation]
     entity_ids = (NER_LABEL_SPACE[entity_types[0]], NER_LABEL_SPACE[entity_types[1]])
     restrict_subj = torch.eq(torch.reshape(phrase_inputs[:,-2],[1,-1]), entity_ids[0]).float()
     restrict_obj = torch.eq(torch.reshape(phrase_inputs[:,-1],[1,-1]), entity_ids[1]).float()
@@ -31,13 +32,18 @@ def batch_type_restrict(relation, phrase_inputs):
     
     return restrict_subj*restrict_obj
 
-def build_phrase_input(phrases, pad_idx):
+def build_phrase_input(phrases, pad_idx, task):
     tokens = [phrase.tokens for phrase in phrases]
     ners = [phrase.ners for phrase in phrases]
     subj_posis = torch.tensor([phrase.subj_posi for phrase in phrases]).unsqueeze(1)
     obj_posis =  torch.tensor([phrase.obj_posi for phrase in phrases]).unsqueeze(1)
-    subj =  torch.tensor([phrase.ners[phrase.subj_posi] for phrase in phrases]).unsqueeze(1) # has to be NERs due to type check
-    obj = torch.tensor([phrase.ners[phrase.obj_posi] for phrase in phrases]).unsqueeze(1)
+    if task == "re":
+        subj =  torch.tensor([phrase.ners[phrase.subj_posi] for phrase in phrases]).unsqueeze(1) # has to be NERs due to type check
+        obj = torch.tensor([phrase.ners[phrase.obj_posi] for phrase in phrases]).unsqueeze(1)
+    else:
+        no_ner_id = NER_LABEL_SPACE[""]
+        subj = torch.full((len(phrases),1), no_ner_id)
+        obj = torch.full((len(phrases),1), no_ner_id)
 
     ner_pad = NER_LABEL_SPACE["<PAD>"]
 
@@ -59,31 +65,13 @@ def build_mask_mat_for_batch(seq_length):
 
     return mask_mat
 
-def set_ner_label_space(labels):
-    if len(NER_LABEL_SPACE) > 0:
-        largest_key = max(list(NER_LABEL_SPACE.values()))
-    else:
-        largest_key = -1
-    current_key = largest_key + 1
-    for label in labels:
-        if label not in NER_LABEL_SPACE:
-            NER_LABEL_SPACE[label] = current_key
-            current_key += 1
-
-# def _prepapre_label(label, label_map):
-#     label_vec = [0.0]*len(label_map)
-#     label_vec[label_map[label]] = 1.0
-
-#     return label_vec
-
-def _prepare_labels(labels, dataset="tacred"):
+def _prepare_labels(labels, label_map):
     converted_labels = []
-    if dataset == "tacred":
-        for label in labels:
-            converted_labels.append(TACRED_LABEL_MAP[label])
+    for label in labels:
+        converted_labels.append(label_map[label])
     return converted_labels
 
-def _prepare_unlabeled_data(unlabeled_data_phrases, vocab, custom_vocab={}):
+def _prepare_unlabeled_data(unlabeled_data_phrases, vocab, spacy_to_custom_ner={}, custom_vocab={}):
     seq_tokens = []
     seq_phrases = []
     for phrase in unlabeled_data_phrases:
@@ -95,7 +83,7 @@ def _prepare_unlabeled_data(unlabeled_data_phrases, vocab, custom_vocab={}):
         if phrase.obj_posi != None:
             tokens[phrase.obj_posi] = "OBJ-{}".format(ners[phrase.obj_posi])
 
-        ners = [SPACY_TO_TACRED[ner] if ner in SPACY_TO_TACRED else ner for ner in ners]
+        ners = [spacy_to_custom_ner[ner] if ner in spacy_to_custom_ner else ner for ner in ners]
         
         tokens = [custom_vocab[token] if token in custom_vocab else vocab[token] for token in tokens]
         ners = [NER_LABEL_SPACE[ner] for ner in ners]
@@ -106,39 +94,31 @@ def _prepare_unlabeled_data(unlabeled_data_phrases, vocab, custom_vocab={}):
     
     return seq_tokens, seq_phrases
 
-def set_tacred_ner_label_space():
-    temp = SPACY_NERS[:]
-    for i, entry in enumerate(temp):
-        if entry in SPACY_TO_TACRED:
-            temp[i] = SPACY_TO_TACRED[entry]
-    temp.append("<PAD>")
-    set_ner_label_space(temp)
-    set_ner_label_space(TACRED_NERS)
-
-
-def create_parser(parser_training_data, explanation_path, dataset="tacred"):
+def create_parser(parser_training_data, explanation_path, task="re", explanation_data=None):
     parser_trainer = None
     
-    if dataset == "tacred":
-        parser_trainer = CCGParserTrainer("re", explanation_path, "", parser_training_data)
+    if task == "re":
+        parser_trainer = CCGParserTrainer("re", explanation_path, "", parser_training_data, explanation_data)
+    elif task == "sa":
+        parser_trainer = CCGParserTrainer("sa", explanation_path, "", parser_training_data, explanation_data)
     
     parser_trainer.train()
     parser = parser_trainer.get_parser()
 
-    with open("../data/training_data/parser.p", "wb") as f:
+    with open("../data/training_data/parser_debug.p", "wb") as f:
         dill.dump(parser, f)
 
     return parser
 
-def match_training_data(labeling_functions, train, dataset, ner_types=None):
+def match_training_data(labeling_functions, train, task, function_ner_types={}):
 
-    # phrases = [generate_phrase(entry, nlp) for entry in train]
+    phrases = [generate_phrase(entry, nlp) for entry in train]
 
-    # with open("train_phrases.p", "wb") as f:
-    #     pickle.dump(phrases, f)
+    with open("../data/training_data/train_phrases_debug.p", "wb") as f:
+        pickle.dump(phrases, f)
 
-    with open("train_phrases.p", "rb") as f:
-        phrases = pickle.load(f)
+    # with open("../data/training_data/train_phrases_debug.p", "rb") as f:
+    #     phrases = pickle.load(f)
 
     matched_data_tuples = []
     unlabeled_data_phrases = []
@@ -148,12 +128,12 @@ def match_training_data(labeling_functions, train, dataset, ner_types=None):
         for function in labeling_functions:
             try:
                 if function(phrase):
-                    if dataset == "tacred":
+                    if task == "re":
                         subj_type = phrase.ners[phrase.subj_posi].lower()
                         obj_type = phrase.ners[phrase.obj_posi].lower()
-                        if ner_types[function][0] == subj_type and ner_types[function][1] == obj_type:
-                            sentence = phrase.sentence.replace("SUBJ", "SUBJ-{}".format(phrase.ners[phrase.subj_posi]))
-                            sentence = sentence.replace("OBJ", "OBJ-{}".format(phrase.ners[phrase.obj_posi]))
+                        if function_ner_types[function][0] == subj_type and function_ner_types[function][1] == obj_type:
+                            sentence = phrase.sentence.replace("subj", "SUBJ-{}".format(phrase.ners[phrase.subj_posi]))
+                            sentence = sentence.replace("obj", "OBJ-{}".format(phrase.ners[phrase.obj_posi]))
                             matched_data_tuples.append((sentence, labeling_functions[function]))
                             not_matched = False
                             break
@@ -165,12 +145,18 @@ def match_training_data(labeling_functions, train, dataset, ner_types=None):
                 continue
         if not_matched:
             unlabeled_data_phrases.append(phrase)
+    
+    with open("../data/training_data/matched_data_tuples_debug.p", "wb") as f:
+        pickle.dump(matched_data_tuples, f)
+    
+    with open("../data/training_data/unlabeled_data_debug.p", "wb") as f:
+        pickle.dump(unlabeled_data_phrases, f)
 
     return matched_data_tuples, unlabeled_data_phrases
 
-def build_unlabeled_dataset(unlabeled_data_phrases, vocab, save_string, custom_vocab={}):
+def build_unlabeled_dataset(unlabeled_data_phrases, vocab, save_string, spacy_to_custom_ner={}, custom_vocab={}): # check spacy_to_custom_ner
     pad_idx = vocab["<pad>"]
-    seq_tokens, seq_phrases = _prepare_unlabeled_data(unlabeled_data_phrases, vocab, custom_vocab)
+    seq_tokens, seq_phrases = _prepare_unlabeled_data(unlabeled_data_phrases, vocab, spacy_to_custom_ner, custom_vocab)
 
     dataset = UnlabeledTrainingDataset(seq_tokens, seq_phrases, pad_idx)
 
@@ -181,12 +167,11 @@ def build_unlabeled_dataset(unlabeled_data_phrases, vocab, save_string, custom_v
     with open(file_name, "wb") as f:
         pickle.dump(dataset, f)
 
-def build_labeled_dataset(sentences, labels, vocab, save_string, split, dataset="tacred", custom_vocab={}):
+def build_labeled_dataset(sentences, labels, vocab, save_string, split, label_map, custom_vocab={}): # check build_labeled_dataset
     pad_idx = vocab["<pad>"]
-    sentences = [clean_text(sentence) for sentence in sentences]
     seq_tokens = convert_text_to_tokens(sentences, vocab, tokenize, custom_vocab)
     
-    label_ids = _prepare_labels(labels, dataset)
+    label_ids = _prepare_labels(labels, label_map)
 
     dataset = TrainingDataset(seq_tokens, label_ids, pad_idx)
 
@@ -197,16 +182,16 @@ def build_labeled_dataset(sentences, labels, vocab, save_string, split, dataset=
     with open(file_name, "wb") as f:
         pickle.dump(dataset, f)
 
-def build_word_to_idx(raw_explanations, vocab, save_string):
+def build_word_to_idx(raw_explanations, nlp, save_string):
     quoted_words = []
     for i, key in enumerate(raw_explanations):
         explanation = raw_explanations[key]
         queries = extract_queries_from_explanations(explanation)
         for query in queries:
-            query = clean_text(query)
+            query = " ".join(tokenize(query)).strip()
             quoted_words.append(query)
     
-    tokenized_queries = convert_text_to_tokens(quoted_words, vocab, tokenize)
+    tokenized_queries = convert_text_to_tokens(quoted_words, vocab, lambda x: x.split())
 
     print("Finished tokenizing actual queries, count: {}".format(str(len(tokenized_queries))))
 
@@ -221,9 +206,105 @@ def build_word_to_idx(raw_explanations, vocab, save_string):
     file_name = "../data/training_data/word2idx_{}.p".format(save_string)
     with open(file_name, "wb") as f:
         pickle.dump(quoted_words_to_index, f)
+    
+def build_datasets_from_unlabeled_data(unlabeled_data, explanation_data, label_map, vocab_, save_string, task, dataset, sample_rate=-1.0):
+    
+    if type(vocab_) == str:
+        with open(vocab_, "rb") as f:
+            vocab = pickle.load(f)
+    else:
+        vocab = build_vocab(train, vocab_["embedding_name"], vocab_["save_string"])
 
-def build_datasets_from_splits(train_path, dev_path, test_path, vocab_, explanation_path, save_string,
-                               label_filter=None, sample_rate=-1.0, dataset="tacred"):
+    parser_training_data = random.sample(unlabeled_data, min(PARSER_TRAIN_SAMPLE, len(train)))
+    
+    parser = create_parser(parser_training_data, explanation_path, task)
+
+    strict_labeling_functions = parser.labeling_functions
+
+    function_ner_types = parser.ner_types
+
+    train_sample = None
+    if sample_rate > 0:
+        sample_number = int(len(train) * sample_rate)
+        train_sample = random.sample(train, sample_number)
+
+    if train_sample:
+        matched_data_tuples, unlabeled_data_phrases = match_training_data(strict_labeling_functions, train_sample, task, function_ner_types)
+    else:
+        matched_data_tuples, unlabeled_data_phrases = match_training_data(strict_labeling_functions, train, task, function_ner_types)
+    
+    custom_vocab = build_custom_vocab(dataset, vocab_length=len(vocab))
+    spacy_to_custom_ner_mapping = load_spacy_to_custom_dataset_ner_mapping(dataset)
+
+    build_unlabeled_dataset(unlabeled_data_phrases, vocab, save_string, spacy_to_custom_ner_mapping, custom_vocab)
+
+    build_labeled_dataset([tup[0] for tup in matched_data_tuples], 
+                          [tup[1] for tup in matched_data_tuples],
+                          vocab, save_string, "matched", label_map, custom_vocab)
+    
+    filtered_raw_explanations = parser.filtered_raw_explanations
+
+    build_word_to_idx(filtered_raw_explanations, vocab, save_string)
+
+    soft_matching_functions = parser.soft_labeling_functions
+
+    function_labels = _prepare_labels([entry[1] for entry in soft_matching_functions], label_map)
+
+    file_name = "../data/training_data/labeling_functions_{}.p".format(save_string)
+    with open(file_name, "wb") as f:
+        dill.dump({"function_pairs" : soft_matching_functions,
+                     "labels" : function_labels}, f)
+
+def build_datasets_from_text(text_data, vocab_, explanation_data, save_string, label_map, label_filter=None,
+                             sample_rate=-1.0, task="re", dataset="tacred"):
+    if type(vocab_) == str:
+        with open(vocab_, "rb") as f:
+            vocab = pickle.load(f)
+    else:
+        vocab = build_vocab(train, vocab_["embedding_name"], vocab_["save_string"])
+    
+    parser_training_data = random.sample(train, min(PARSER_TRAIN_SAMPLE, len(train)))
+    
+    parser = create_parser(parser_training_data, "", task, explanation_data)
+
+    strict_labeling_functions = parser.labeling_functions
+
+    function_ner_types = parser.ner_types
+    
+    train_sample = None
+    if sample_rate > 0:
+        sample_number = int(len(train) * sample_rate)
+        train_sample = random.sample(train, sample_number)
+
+    if train_sample:
+        matched_data_tuples, unlabeled_data_phrases = match_training_data(strict_labeling_functions, train_sample, task, function_ner_types)
+    else:
+        matched_data_tuples, unlabeled_data_phrases = match_training_data(strict_labeling_functions, train, task, function_ner_types)
+    
+    custom_vocab = build_custom_vocab(dataset, vocab_length=len(vocab))
+    spacy_to_custom_ner_mapping = load_spacy_to_custom_dataset_ner_mapping(dataset)
+
+    build_unlabeled_dataset(unlabeled_data_phrases, vocab, save_string, spacy_to_custom_ner_mapping, custom_vocab)
+
+    build_labeled_dataset([tup[0] for tup in matched_data_tuples], 
+                          [tup[1] for tup in matched_data_tuples],
+                          vocab, save_string, "matched", label_map, custom_vocab)
+    
+    filtered_raw_explanations = parser.filtered_raw_explanations
+
+    build_word_to_idx(filtered_raw_explanations, vocab, save_string)
+
+    soft_matching_functions = parser.soft_labeling_functions
+
+    function_labels = _prepare_labels([entry[1] for entry in soft_matching_functions], label_map)
+
+    file_name = "../data/training_data/labeling_functions_{}.p".format(save_string)
+    with open(file_name, "wb") as f:
+        dill.dump({"function_pairs" : soft_matching_functions,
+                     "labels" : function_labels}, f)
+
+def build_datasets_from_splits(train_path, dev_path, test_path, vocab_, explanation_path, save_string, label_map,
+                               label_filter=None, sample_rate=-1.0, task="re", dataset="tacred"):
     
     with open(train_path) as f:
         train = json.load(f)
@@ -237,14 +318,14 @@ def build_datasets_from_splits(train_path, dev_path, test_path, vocab_, explanat
 
     parser_training_data = random.sample(train, min(PARSER_TRAIN_SAMPLE, len(train)))
     
-    parser = create_parser(parser_training_data, explanation_path, dataset)
+    parser = create_parser(parser_training_data, explanation_path, task)
 
-    # with open("../data/training_data/parser.p", "rb") as f:
+    # with open("../data/training_data/parser_debug.p", "rb") as f:
     #     parser = dill.load(f)
     
     strict_labeling_functions = parser.labeling_functions
 
-    ner_types = parser.ner_types
+    function_ner_types = parser.ner_types
     
     train_sample = None
     if sample_rate > 0:
@@ -252,37 +333,38 @@ def build_datasets_from_splits(train_path, dev_path, test_path, vocab_, explanat
         train_sample = random.sample(train, sample_number)
 
     if train_sample:
-        matched_data_tuples, unlabeled_data_phrases = match_training_data(strict_labeling_functions, train_sample, dataset, ner_types)
+        matched_data_tuples, unlabeled_data_phrases = match_training_data(strict_labeling_functions, train_sample, task, function_ner_types)
     else:
-        matched_data_tuples, unlabeled_data_phrases = match_training_data(strict_labeling_functions, train, dataset, ner_types)
-
-    # with open("matched_data_tuples.p", "rb") as f:
+        matched_data_tuples, unlabeled_data_phrases = match_training_data(strict_labeling_functions, train, task, function_ner_types)
+    
+    # with open("../data/training_data/matched_data_tuples_debug.p", "rb") as f:
     #     matched_data_tuples = pickle.load(f)
     
-    # with open("unlabeled_data.p", "rb") as f:
+    # with open("../data/training_data/unlabeled_data_phrases_debug.p", "rb") as f:
     #     unlabeled_data_phrases = pickle.load(f)
-    
-    tacred_vocab = build_custom_vocab(dataset="tacred", vocab_length=len(vocab))
 
-    build_unlabeled_dataset(unlabeled_data_phrases, vocab, save_string, tacred_vocab)
+    custom_vocab = build_custom_vocab(dataset, vocab_length=len(vocab))
+    spacy_to_custom_ner_mapping = load_spacy_to_custom_dataset_ner_mapping(dataset)
+
+    build_unlabeled_dataset(unlabeled_data_phrases, vocab, save_string, spacy_to_custom_ner_mapping, custom_vocab)
 
     build_labeled_dataset([tup[0] for tup in matched_data_tuples], 
                           [tup[1] for tup in matched_data_tuples],
-                          vocab, save_string, "matched", dataset, tacred_vocab)
+                          vocab, save_string, "matched", label_map, custom_vocab)
 
     with open(dev_path) as f:
         dev = json.load(f)
     
     build_labeled_dataset([ent["text"] for ent in dev], 
                           [ent["label"] for ent in dev],
-                          vocab, save_string, "dev", dataset, tacred_vocab)
+                          vocab, save_string, "dev", label_map, custom_vocab)
     
     with open(test_path) as f:
         test = json.load(f)
     
     build_labeled_dataset([ent["text"] for ent in test], 
                           [ent["label"] for ent in test],
-                          vocab, save_string, "test", dataset, tacred_vocab)
+                          vocab, save_string, "test", label_map, custom_vocab)
 
     filtered_raw_explanations = parser.filtered_raw_explanations
 
@@ -290,25 +372,25 @@ def build_datasets_from_splits(train_path, dev_path, test_path, vocab_, explanat
 
     soft_matching_functions = parser.soft_labeling_functions
 
-    function_labels = _prepare_labels([entry[1] for entry in soft_matching_functions], dataset)
+    function_labels = _prepare_labels([entry[1] for entry in soft_matching_functions], label_map)
 
     file_name = "../data/training_data/labeling_functions_{}.p".format(save_string)
     with open(file_name, "wb") as f:
         dill.dump({"function_pairs" : soft_matching_functions,
                      "labels" : function_labels}, f)
 
-def _apply_no_relation_label(values, preds, label_map, no_relation_key, threshold, entropy=True):
+def _apply_none_label(values, preds, none_label_id, threshold, entropy=True):
     if entropy:
-        no_relation_mask = values > threshold
+        none_label_mask = values > threshold
     else:
-        no_relation_mask = values < threshold
+        none_label_mask = values < threshold
 
-    final_preds = [label_map[no_relation_key] if mask else preds[i] for i, mask in enumerate(no_relation_mask)]
+    final_preds = [none_label_id if mask else preds[i] for i, mask in enumerate(none_label_mask)]
 
     return final_preds
 
-def evaluate_next_clf(data_path, model, strict_loss_fn, label_map, no_relation_thresholds=None,
-                      batch_size=128, hidden_dim=100, no_relation_key="no_relation"):
+def evaluate_next_clf(data_path, model, strict_loss_fn, num_labels, none_label_thresholds=None,
+                      batch_size=128, hidden_dim=100, none_label_id=-1):
 
     with open(data_path, "rb") as f:
         eval_dataset = pickle.load(f)
@@ -326,11 +408,11 @@ def evaluate_next_clf(data_path, model, strict_loss_fn, label_map, no_relation_t
     nn.init.xavier_normal_(h0)
     nn.init.xavier_normal_(c0)
     
-    if no_relation_thresholds == None:
-        no_relation_thresholds = prep_and_tune_no_relation_threshold(model, h0, c0, eval_dataset, device, batch_size,\
-                                                                    label_map, no_relation_key)
+    if none_label_thresholds == None:
+        none_label_thresholds = prep_and_tune_none_label_threshold(model, h0, c0, eval_dataset, device, batch_size,\
+                                                                     none_label_id, num_labels)
     
-    entropy_threshold, max_value_threshold = no_relation_thresholds
+    entropy_threshold, max_value_threshold = none_label_thresholds
 
     strict_total_loss = 0
     total_class_probs = []
@@ -339,7 +421,6 @@ def evaluate_next_clf(data_path, model, strict_loss_fn, label_map, no_relation_t
     entropy_predictions = []
     max_val_predictions = []
     for step, batch in enumerate(tqdm(eval_dataset.as_batches(batch_size=batch_size, shuffle=False))):
-        # batch = [r.to(device) for r in batch]
         tokens, seq_lengths, batch_labels = batch
         tokens = tokens.to(device)
         batch_labels = batch_labels.to(device)
@@ -353,11 +434,10 @@ def evaluate_next_clf(data_path, model, strict_loss_fn, label_map, no_relation_t
             entropy = torch.sum(class_probs * -1.0 * torch.log(torch.clamp(class_probs, 1e-5, 1.0)), axis=1).cpu().numpy()
             class_preds = torch.argmax(class_probs, dim=1).cpu().numpy()
             
-            entropy_final_class_preds = _apply_no_relation_label(entropy, class_preds, label_map,\
-                                                                 no_relation_key, entropy_threshold)
+            entropy_final_class_preds = _apply_none_label(entropy, class_preds, none_label_id, entropy_threshold)
 
-            max_value_final_class_preds = _apply_no_relation_label(max_probs, class_preds, label_map,\
-                                                                   no_relation_key, max_value_threshold, False)
+            max_value_final_class_preds = _apply_none_label(max_probs, class_preds, none_label_id,\
+                                                                   max_value_threshold, False)
             f1_labels = batch_labels.cpu().numpy()
             entropy_predictions.append(entropy_final_class_preds)
             max_val_predictions.append(max_value_final_class_preds)
@@ -366,18 +446,19 @@ def evaluate_next_clf(data_path, model, strict_loss_fn, label_map, no_relation_t
             strict_total_loss += strict_loss.item()
             batch_count += 1
             total_class_probs.append(class_probs.cpu().numpy())
-    
-    _, _, avg_ent_f1_score = tacred_eval(list(np.concatenate(entropy_predictions)), list(np.concatenate(true_labels)))
-    _, _, avg_val_f1_score = tacred_eval(list(np.concatenate(max_val_predictions)), list(np.concatenate(true_labels)))
+
+    _, _, avg_ent_f1_score = f1_eval_function(list(np.concatenate(entropy_predictions)), list(np.concatenate(true_labels)), none_label_id)
+    _, _, avg_val_f1_score = f1_eval_function(list(np.concatenate(max_val_predictions)), list(np.concatenate(true_labels)), none_label_id)
     total_class_probs = np.concatenate(total_class_probs, axis=0)
     avg_strict_loss = strict_total_loss / batch_count
 
-    return avg_strict_loss, avg_ent_f1_score, avg_val_f1_score, total_class_probs, no_relation_thresholds
+    return avg_strict_loss, avg_ent_f1_score, avg_val_f1_score, total_class_probs, none_label_thresholds
 
-def prep_and_tune_no_relation_threshold(model, h0, c0, eval_dataset, device, batch_size, label_map, no_relation_key):
+def prep_and_tune_none_label_threshold(model, h0, c0, eval_dataset, device, batch_size, none_label_id, num_labels):
     
-    if len(no_relation_key) == 0:
-        return int(-1.0 * np.log(1/len(label_map))) + 1, -1.0
+    # if there isn't a none label, thresholds are set so that predictions are left alone
+    if none_label_id < 0:
+        return 2*int(-1.0 * np.log(1/num_labels)), -1.0
     
     entropy_values = []
     max_prob_values = []
@@ -409,30 +490,30 @@ def prep_and_tune_no_relation_threshold(model, h0, c0, eval_dataset, device, bat
     predict_labels = np.concatenate(predict_labels).ravel()
     labels = np.concatenate(labels).ravel()
 
-    no_relation_threshold_entropy, best_f1 = tune_no_relation_threshold(entropy_values, predict_labels, labels,\
-                                                                  label_map, no_relation_key)
+    none_label_threshold_entropy, best_f1 = tune_none_label_threshold(entropy_values, predict_labels, labels,\
+                                                                        none_label_id, num_labels)
     print(best_f1)
 
-    no_relation_threshold_max_value, best_f1 = tune_no_relation_threshold(max_prob_values, predict_labels, labels,\
-                                                                    label_map, no_relation_key, False)
+    none_label_threshold_max_value, best_f1 = tune_none_label_threshold(max_prob_values, predict_labels, labels,\
+                                                                          none_label_id, num_labels, False)
     print(best_f1)
 
-    return no_relation_threshold_entropy, no_relation_threshold_max_value
+    return none_label_threshold_entropy, none_label_threshold_max_value
     
-def tune_no_relation_threshold(values, preds, labels, label_map, no_relation_key="no_relation", entropy=True):
+def tune_none_label_threshold(values, preds, labels, none_label_id, num_labels, entropy=True):
     step = 0.001
     if entropy:
-        max_entropy_cut_off = int(-1.0 * np.log(1/len(label_map)) / step) + 1
+        max_entropy_cut_off = int(-1.0 * np.log(1/num_labels) / step) + 1
         thresholds = [step * i for i in range(1, max_entropy_cut_off)]
     else:
         max_prob_cut_off = int(1/step) + 1
         thresholds = [step * i for i in range(1, max_prob_cut_off)]
+    
     best_f1 = 0
     best_threshold = -1
     for threshold in thresholds:
-        final_preds = _apply_no_relation_label(values, preds, label_map, no_relation_key, threshold, entropy)
-        _, _, f1_score = tacred_eval(final_preds, labels)
-
+        final_preds = _apply_none_label(values, preds, none_label_id, threshold, entropy)
+        _, _, f1_score = f1_eval_function(final_preds, labels, none_label_id)
 
         if f1_score > best_f1:
             best_threshold = threshold
@@ -440,7 +521,7 @@ def tune_no_relation_threshold(values, preds, labels, label_map, no_relation_key
     
     return best_threshold, best_f1
 
-def tacred_eval(pred, labels):
+def f1_eval_function(pred, labels, none_label_id):
     correct_by_relation = 0
     guessed_by_relation = 0
     gold_by_relation = 0
@@ -450,13 +531,13 @@ def tacred_eval(pred, labels):
         gold = labels[idx]
         guess = pred[idx]
 
-        if gold == TACRED_LABEL_MAP["no_relation"] and guess == TACRED_LABEL_MAP["no_relation"]:
+        if gold == none_label_id and guess == none_label_id:
             pass
-        elif gold == TACRED_LABEL_MAP["no_relation"] and guess != TACRED_LABEL_MAP["no_relation"]:
+        elif gold == none_label_id and guess != none_label_id:
             guessed_by_relation += 1
-        elif gold != TACRED_LABEL_MAP["no_relation"] and guess == TACRED_LABEL_MAP["no_relation"]:
+        elif gold != none_label_id and guess == none_label_id:
             gold_by_relation += 1
-        elif gold != TACRED_LABEL_MAP["no_relation"] and guess != TACRED_LABEL_MAP["no_relation"]:
+        elif gold != none_label_id and guess != none_label_id:
             guessed_by_relation += 1
             gold_by_relation += 1
             if gold == guess:
