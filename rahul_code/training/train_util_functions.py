@@ -1,7 +1,7 @@
 import pickle
 import json
 import random
-from training.util_functions import generate_save_string, convert_text_to_tokens, tokenize, extract_queries_from_explanations, clean_text, build_vocab, build_custom_vocab
+from training.util_functions import generate_save_string, convert_text_to_tokens, tokenize, extract_queries_from_explanations, clean_text, build_vocab, build_custom_vocab, load_spacy_to_custom_dataset_ner_mapping
 from training.constants import PARSER_TRAIN_SAMPLE, UNMATCH_TYPE_SCORE, TACRED_LABEL_MAP, DEV_F1_SAMPLE
 from training.util_classes import BaseVariableLengthDataset, UnlabeledTrainingDataset, TrainingDataset
 import sys
@@ -38,6 +38,11 @@ def build_phrase_input(phrases, pad_idx, task):
     subj_posis = torch.tensor([phrase.subj_posi for phrase in phrases]).unsqueeze(1)
     obj_posis =  torch.tensor([phrase.obj_posi for phrase in phrases]).unsqueeze(1)
     if task == "re":
+        lengths = torch.tensor([len(token_seq) for token_seq in tokens]).unsqueeze(1)
+        subj_bool = subj_posis < lengths
+        obj_bool = obj_posis < lengths
+        assert sum(subj_bool).item() == len(phrases)
+        assert sum(obj_bool).item() == len(phrases)
         subj =  torch.tensor([phrase.ners[phrase.subj_posi] for phrase in phrases]).unsqueeze(1) # has to be NERs due to type check
         obj = torch.tensor([phrase.ners[phrase.obj_posi] for phrase in phrases]).unsqueeze(1)
     else:
@@ -182,7 +187,7 @@ def build_labeled_dataset(sentences, labels, vocab, save_string, split, label_ma
     with open(file_name, "wb") as f:
         pickle.dump(dataset, f)
 
-def build_word_to_idx(raw_explanations, nlp, save_string):
+def build_word_to_idx(raw_explanations, vocab, save_string):
     quoted_words = []
     for i, key in enumerate(raw_explanations):
         explanation = raw_explanations[key]
@@ -318,10 +323,10 @@ def build_datasets_from_splits(train_path, dev_path, test_path, vocab_, explanat
 
     parser_training_data = random.sample(train, min(PARSER_TRAIN_SAMPLE, len(train)))
     
-    parser = create_parser(parser_training_data, explanation_path, task)
+    # parser = create_parser(parser_training_data, explanation_path, task)
 
-    # with open("../data/training_data/parser_debug.p", "rb") as f:
-    #     parser = dill.load(f)
+    with open("../data/training_data/parser_debug.p", "rb") as f:
+        parser = dill.load(f)
     
     strict_labeling_functions = parser.labeling_functions
 
@@ -332,16 +337,16 @@ def build_datasets_from_splits(train_path, dev_path, test_path, vocab_, explanat
         sample_number = int(len(train) * sample_rate)
         train_sample = random.sample(train, sample_number)
 
-    if train_sample:
-        matched_data_tuples, unlabeled_data_phrases = match_training_data(strict_labeling_functions, train_sample, task, function_ner_types)
-    else:
-        matched_data_tuples, unlabeled_data_phrases = match_training_data(strict_labeling_functions, train, task, function_ner_types)
+    # if train_sample:
+    #     matched_data_tuples, unlabeled_data_phrases = match_training_data(strict_labeling_functions, train_sample, task, function_ner_types)
+    # else:
+    #     matched_data_tuples, unlabeled_data_phrases = match_training_data(strict_labeling_functions, train, task, function_ner_types)
     
-    # with open("../data/training_data/matched_data_tuples_debug.p", "rb") as f:
-    #     matched_data_tuples = pickle.load(f)
+    with open("../data/training_data/matched_data_tuples_debug.p", "rb") as f:
+        matched_data_tuples = pickle.load(f)
     
-    # with open("../data/training_data/unlabeled_data_phrases_debug.p", "rb") as f:
-    #     unlabeled_data_phrases = pickle.load(f)
+    with open("../data/training_data/unlabeled_data_debug.p", "rb") as f:
+        unlabeled_data_phrases = pickle.load(f)
 
     custom_vocab = build_custom_vocab(dataset, vocab_length=len(vocab))
     spacy_to_custom_ner_mapping = load_spacy_to_custom_dataset_ner_mapping(dataset)

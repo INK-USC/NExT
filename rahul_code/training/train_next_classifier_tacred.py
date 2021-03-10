@@ -1,4 +1,3 @@
-from transformers import AdamW
 from torch.optim import Adagrad, SGD
 import torch
 import sys
@@ -123,9 +122,15 @@ def main():
     relation_ner_types = TACRED_ENTITY_TYPES
 
     if args.build_data:
-       build_datasets_from_splits(args.train_path, args.dev_path, args.test_path, args.vocab_path,
-                                  TACRED_LABEL_MAP, args.explanation_data_path, save_string,
-                                  task=task, dataset=dataset)
+        vocab_ = {
+            "embedding_name" : "glove.840B.300d",
+            "save_string" : "glove.840B.300d_-1_0.6"
+        }
+        build_datasets_from_splits(args.train_path, args.dev_path, args.test_path, vocab_,
+                                   args.explanation_data_path, save_string, TACRED_LABEL_MAP,
+                                   task=task, dataset=dataset)
+    
+    return
 
     with open("../data/training_data/unlabeled_data_{}.p".format(save_string), "rb") as f:
         unlabeled_data = pickle.load(f)

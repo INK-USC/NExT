@@ -34,6 +34,7 @@ class TrainedCCGParser():
         self.soft_labeling_functions = None
         self.filtered_raw_explanations = None
         self.ner_types = None
+        self.soft_label_function_to_semantic_map = None
         self.low_end_filter_count = low_end_filter_count
         self.high_end_filter_pct = high_end_filter_pct
 
@@ -109,55 +110,55 @@ class TrainedCCGParser():
                 2. Parse Trees -> Semantic Representation
                 3. Semantic Representation -> Labeling Function
         """
-        cut_off = int(len(self.loaded_data) * 0.2)
-        for i, datapoint in enumerate(self.loaded_data):
-            if len(datapoint.raw_explanation):
-                tokenizations = self.loaded_data[i].tokenized_explanations
-                logic_forms = []
-                for tokenization in tokenizations:
-                    try:
-                        parses = list(utils.parse_tokens(tokenization, self.grammar))
-                        logic_forms += parses
-                    except:
-                        continue
-                semantic_counts = {}
-                if len(logic_forms):
-                    semantic_counts = {}
-                    for parse in logic_forms:
-                        semantic_repr = utils.create_semantic_repr(parse)
-                        if semantic_repr:
-                            if semantic_repr in semantic_counts:
-                                semantic_counts[semantic_repr] += 1
-                            else:
-                                semantic_counts[semantic_repr] = 1
+        # cut_off = int(len(self.loaded_data) * 0.2)
+        # for i, datapoint in enumerate(self.loaded_data):
+        #     if len(datapoint.raw_explanation):
+        #         tokenizations = self.loaded_data[i].tokenized_explanations
+        #         logic_forms = []
+        #         for tokenization in tokenizations:
+        #             try:
+        #                 parses = list(utils.parse_tokens(tokenization, self.grammar))
+        #                 logic_forms += parses
+        #             except:
+        #                 continue
+        #         semantic_counts = {}
+        #         if len(logic_forms):
+        #             semantic_counts = {}
+        #             for parse in logic_forms:
+        #                 semantic_repr = utils.create_semantic_repr(parse)
+        #                 if semantic_repr:
+        #                     if semantic_repr in semantic_counts:
+        #                         semantic_counts[semantic_repr] += 1
+        #                     else:
+        #                         semantic_counts[semantic_repr] = 1
                     
-                    if len(semantic_counts) > 1:
-                        semantic_counts = utils.check_clauses_in_parse_filter(semantic_counts)
+        #             if len(semantic_counts) > 1:
+        #                 semantic_counts = utils.check_clauses_in_parse_filter(semantic_counts)
 
-                self.loaded_data[i].semantic_counts = semantic_counts
+        #         self.loaded_data[i].semantic_counts = semantic_counts
 
-                labeling_functions = {}
-                if len(semantic_counts):
-                    for key in semantic_counts:
-                        labeling_function = utils.create_labeling_function(key)
-                        if labeling_function:
-                            try:
-                                if labeling_function(datapoint.sentence): # filtering out labeling functions that don't even apply on their own datapoint
-                                    labeling_functions[key] = labeling_function
-                            except:
-                                continue                                    
+        #         labeling_functions = {}
+        #         if len(semantic_counts):
+        #             for key in semantic_counts:
+        #                 labeling_function = utils.create_labeling_function(key)
+        #                 if labeling_function:
+        #                     try:
+        #                         if labeling_function(datapoint.sentence): # filtering out labeling functions that don't even apply on their own datapoint
+        #                             labeling_functions[key] = labeling_function
+        #                     except:
+        #                         continue                                    
 
-                self.loaded_data[i].labeling_functions = labeling_functions
+        #         self.loaded_data[i].labeling_functions = labeling_functions
 
-            if verbose:
-                if i > 0 and i % cut_off == 0:
-                    print("Parser: 20% more explanations parsed")
+        #     if verbose:
+        #         if i > 0 and i % cut_off == 0:
+        #             print("Parser: 20% more explanations parsed")
         
         # with open("loaded_data.p", "wb") as f:
         #     dill.dump(self.loaded_data, f)
         
-        # with open("loaded_data.p", "rb") as f:
-        #     self.loaded_data = dill.load(f)
+        with open("../training/loaded_data.p", "rb") as f:
+            self.loaded_data = dill.load(f)
         
     def matrix_filter(self, unlabeled_data, task="re"):
         """
@@ -295,11 +296,13 @@ class TrainedCCGParser():
 
     def build_soft_labeling_functions(self):
         self.soft_labeling_functions = []
+        self.soft_label_function_to_semantic_map = {}
         soft_filtered_raw_explanations = {}
         for key in self.semantic_reps:
             soft_labeling_function = utils.create_soft_labeling_function(key)
             if soft_labeling_function:
                 self.soft_labeling_functions.append((soft_labeling_function, self.labeling_functions[self.semantic_reps[key]]))
+                self.soft_label_function_to_semantic_map[soft_labeling_function] = key
                 soft_filtered_raw_explanations[key] = self.filtered_raw_explanations[key]
         
         self.filtered_raw_explanations = soft_filtered_raw_explanations

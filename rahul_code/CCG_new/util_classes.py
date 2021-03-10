@@ -48,11 +48,11 @@ class Phrase():
         self.subj_posi = subj_posi
         self.obj_posi = obj_posi
         self.sentence = tokens_to_string(tokens)
-        if subj_posi < self.tokens:
+        if subj_posi < len(self.tokens):
             self.subj = self.tokens[self.subj_posi]
         else:
             self.subj = ""
-        if obj_posi < self.tokens:
+        if obj_posi < len(self.tokens):
             self.obj = self.tokens[self.obj_posi]
         else:
             self.obj = ""
