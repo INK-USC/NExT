@@ -122,15 +122,14 @@ def main():
     relation_ner_types = TACRED_ENTITY_TYPES
 
     if args.build_data:
-        vocab_ = {
-            "embedding_name" : "glove.840B.300d",
-            "save_string" : "glove.840B.300d_-1_0.6"
-        }
-        build_datasets_from_splits(args.train_path, args.dev_path, args.test_path, vocab_,
+        # vocab_ = {
+        #     "embedding_name" : "glove.840B.300d",
+        #     "save_string" : "glove.840B.300d_-1_0.6"
+        # }
+        build_datasets_from_splits(args.train_path, args.dev_path, args.test_path, args.vocab_path,
                                    args.explanation_data_path, save_string, TACRED_LABEL_MAP,
                                    task=task, dataset=dataset)
     
-    return
 
     with open("../data/training_data/unlabeled_data_{}.p".format(save_string), "rb") as f:
         unlabeled_data = pickle.load(f)
@@ -271,11 +270,7 @@ def main():
                 function_batch_scores = []
                 for pair in soft_labeling_functions:
                     func, rel = pair
-                    try:
-                        batch_scores = func(lfind_output, quoted_words_to_index, mask_mat)(phrase_input).detach() # 1 x B
-                    except:
-                        batch_scores = torch.zeros((1, args.unlabeled_batch_size)).to(device).detach()
-                    
+                    batch_scores = func(lfind_output, quoted_words_to_index, mask_mat)(phrase_input).detach() # 1 x B
                     type_restrict_multiplier = batch_type_restrict_re(rel, phrase_input, relation_ner_types).detach() # 1 x B
                     final_scores = batch_scores * type_restrict_multiplier # 1 x B
                     function_batch_scores.append(final_scores)
@@ -344,7 +339,7 @@ def main():
             print("Updated Dev F1 Score")
         
         test_results = evaluate_next_clf(test_path, clf, strict_match_loss_function, number_of_classes,\
-                                         no_relation_thresholds=no_relation_thresholds,\
+                                         none_label_thresholds=no_relation_thresholds,\
                                          batch_size=args.eval_batch_size, none_label_id=none_label_id)
         
         avg_loss, avg_test_ent_f1_score, avg_test_val_f1_score, total_test_class_probs, _ = test_results

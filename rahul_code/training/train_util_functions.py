@@ -66,7 +66,7 @@ def build_mask_mat_for_batch(seq_length):
     for i in range(seq_length):
         for j in range(seq_length):
             mask_mat[i,j,i:j+1] = 1
-    mask_mat = mask_mat.float()
+    mask_mat = mask_mat.long()
 
     return mask_mat
 
@@ -117,13 +117,13 @@ def create_parser(parser_training_data, explanation_path, task="re", explanation
 
 def match_training_data(labeling_functions, train, task, function_ner_types={}):
 
-    phrases = [generate_phrase(entry, nlp) for entry in train]
+    # phrases = [generate_phrase(entry, nlp) for entry in train]
 
-    with open("../data/training_data/train_phrases_debug.p", "wb") as f:
-        pickle.dump(phrases, f)
+    # with open("../data/training_data/train_phrases_debug.p", "wb") as f:
+    #     pickle.dump(phrases, f)
 
-    # with open("../data/training_data/train_phrases_debug.p", "rb") as f:
-    #     phrases = pickle.load(f)
+    with open("../data/training_data/train_phrases_debug.p", "rb") as f:
+        phrases = pickle.load(f)
 
     matched_data_tuples = []
     unlabeled_data_phrases = []
@@ -323,10 +323,10 @@ def build_datasets_from_splits(train_path, dev_path, test_path, vocab_, explanat
 
     parser_training_data = random.sample(train, min(PARSER_TRAIN_SAMPLE, len(train)))
     
-    # parser = create_parser(parser_training_data, explanation_path, task)
+    parser = create_parser(parser_training_data, explanation_path, task)
 
-    with open("../data/training_data/parser_debug.p", "rb") as f:
-        parser = dill.load(f)
+    # with open("../data/training_data/parser_debug.p", "rb") as f:
+    #     parser = dill.load(f)
     
     strict_labeling_functions = parser.labeling_functions
 
@@ -337,16 +337,16 @@ def build_datasets_from_splits(train_path, dev_path, test_path, vocab_, explanat
         sample_number = int(len(train) * sample_rate)
         train_sample = random.sample(train, sample_number)
 
-    # if train_sample:
-    #     matched_data_tuples, unlabeled_data_phrases = match_training_data(strict_labeling_functions, train_sample, task, function_ner_types)
-    # else:
-    #     matched_data_tuples, unlabeled_data_phrases = match_training_data(strict_labeling_functions, train, task, function_ner_types)
+    if train_sample:
+        matched_data_tuples, unlabeled_data_phrases = match_training_data(strict_labeling_functions, train_sample, task, function_ner_types)
+    else:
+        matched_data_tuples, unlabeled_data_phrases = match_training_data(strict_labeling_functions, train, task, function_ner_types)
     
-    with open("../data/training_data/matched_data_tuples_debug.p", "rb") as f:
-        matched_data_tuples = pickle.load(f)
+    # with open("../data/training_data/matched_data_tuples_debug.p", "rb") as f:
+    #     matched_data_tuples = pickle.load(f)
     
-    with open("../data/training_data/unlabeled_data_debug.p", "rb") as f:
-        unlabeled_data_phrases = pickle.load(f)
+    # with open("../data/training_data/unlabeled_data_debug.p", "rb") as f:
+    #     unlabeled_data_phrases = pickle.load(f)
 
     custom_vocab = build_custom_vocab(dataset, vocab_length=len(vocab))
     spacy_to_custom_ner_mapping = load_spacy_to_custom_dataset_ner_mapping(dataset)
