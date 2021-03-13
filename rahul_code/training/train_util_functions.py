@@ -188,14 +188,16 @@ def build_labeled_dataset(sentences, labels, vocab, save_string, split, label_ma
         pickle.dump(dataset, f)
 
 def build_word_to_idx(raw_explanations, vocab, save_string):
-    quoted_words = []
+    quoted_words = {}
     for i, key in enumerate(raw_explanations):
         explanation = raw_explanations[key]
         queries = extract_queries_from_explanations(explanation)
         for query in queries:
             query = " ".join(tokenize(query)).strip()
-            quoted_words.append(query)
+            quoted_words[query] = 1
     
+    quoted_words = list(quoted_words.keys())
+
     tokenized_queries = convert_text_to_tokens(quoted_words, vocab, lambda x: x.split())
 
     print("Finished tokenizing actual queries, count: {}".format(str(len(tokenized_queries))))
