@@ -80,6 +80,11 @@ class PreTrainingFindModuleDataset(BaseVariableLengthDataset):
             temp_data = list(zip(self.tokens, self.queries, self.labels))
             random.Random(seed).shuffle(temp_data)
             shuffled_tokens, shuffled_queires, shuffled_labels = zip(*temp_data)
+        else:
+            shuffled_tokens = self.tokens
+            shuffled_queires = self.queries
+            shuffled_labels = self.labels
+
         for i in range(0, len(shuffled_tokens), batch_size): # i incrememt by batch_size
             batch_tokens = shuffled_tokens[i: i+batch_size] # slice
             batch_tokens, _ = self.variable_length_batch_as_tensors(batch_tokens, self.pad_idx)
@@ -126,7 +131,7 @@ class TrainingDataset(BaseVariableLengthDataset):
 
             Returns:
                 batch_tokens, batch_queries, batch_labels : per batch the tokens, queries and labels
-                                                            needed for find pre-training
+                                                            needed for training
         """
         if shuffle:
             temp_data = list(zip(self.tokens, self.labels))
@@ -167,7 +172,7 @@ class UnlabeledTrainingDataset(BaseVariableLengthDataset):
         self.tokens = tokens
         self.phrases = phrases
         self.pad_idx = pad_idx
-        self.indices = [i for in range(len(self.tokens))]
+        self.indices = [i for i in range(len(self.tokens))]
         assert len(self.tokens) == len(self.phrases)
         logging.info("Dataset built, count: {}".format(str(len(self.tokens))))
     
@@ -183,13 +188,19 @@ class UnlabeledTrainingDataset(BaseVariableLengthDataset):
                 shuffle   (bool) : whether to shuffle data before batching
 
             Returns:
-                batch_tokens, batch_queries, batch_labels, batch_indices : per batch the tokens, queries and labels
-                                                                           needed for find pre-training
+                batch_tokens, batch_queries, batch_labels, batch_indices : per batch the tokens, queries, labels and
+                                                                           correpsonding indices needed
+                                                                           for unlabeled data training
         """
         if shuffle:
             temp_data = list(zip(self.indices, self.tokens, self.phrases))
             random.Random(seed).shuffle(temp_data)
             shuffled_indices, shuffled_tokens, shuffled_phrases = zip(*temp_data)
+        else:
+            shuffled_indices = self.indices
+            shuffled_tokens = self.tokens
+            shuffled_phrases = self.phrases
+
         for i in range(0, len(shuffled_tokens), batch_size): # i incrememt by batch_size
             batch_tokens = shuffled_tokens[i: i+batch_size] # slice
             batch_tokens, batch_lengths = self.variable_length_batch_as_tensors(batch_tokens, self.pad_idx)

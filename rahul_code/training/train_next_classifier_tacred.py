@@ -75,7 +75,7 @@ def main():
                         help="initial embeddings to use")
     parser.add_argument('--seed',
                         type=int,
-                        default=7698,
+                        default=42,
                         help="random seed for initialization")
     parser.add_argument('--gamma',
                         type=float,
@@ -162,10 +162,6 @@ def main():
     custom_vocab = build_custom_vocab("tacred", len(vocab))
     custom_vocab_length = len(custom_vocab)
 
-    clf = BiLSTM_Att_Clf.BiLSTM_Att_Clf(vocab.vectors, pad_idx, args.emb_dim, args.hidden_dim,
-                                        torch.cuda.is_available(), number_of_classes,
-                                        custom_token_count=custom_vocab_length)
-
     epochs = args.epochs
     epoch_string = str(epochs)
     test_epoch_f1_scores = []
@@ -196,9 +192,6 @@ def main():
                     best_dev_f1_score = float(row[-1])
         
         print("loaded past results")
-    
-    clf = clf.to(device)
-    find_module = find_module.to(device)
 
     # Get queries ready for Find Module
     lfind_query_tokens, _ = BaseVariableLengthDataset.variable_length_batch_as_tensors(tokenized_queries, pad_idx)
@@ -207,14 +200,12 @@ def main():
     # Preping Soft Labeling Function Data
     soft_labeling_functions = soft_labeling_functions_dict["function_pairs"]
     soft_labeling_function_labels = soft_labeling_functions_dict["labels"].to(device)
-
-    if args.use_adagrad:
-        optimizer = Adagrad(clf.parameters(), lr=args.learning_rate)
-    else:
-        optimizer = SGD(clf.parameters(), lr=args.learning_rate)
     
-    h0 = torch.empty(n_layer_x_n_directions, full_batch_size, hidden_dim).to(device)
-    c0 = torch.empty(n_layer_x_n_directions, full_batch_size, hidden_dim).to(device)
+    full_batch_size = args.match_batch_size + args.unlabeled_batch_size
+    n_layer_x_n_directions = 4
+
+    h0 = torch.empty(n_layer_x_n_directions, full_batch_size, args.hidden_dim).to(device)
+    c0 = torch.empty(n_layer_x_n_directions, full_batch_size, args.hidden_dim).to(device)
     nn.init.xavier_normal_(h0)
     nn.init.xavier_normal_(c0)
     
@@ -224,9 +215,12 @@ def main():
                                               torch.cuda.is_available(), custom_token_count=custom_vocab_length)
         
         find_module.load_state_dict(torch.load(args.find_module_path))
+        find_module = find_module.to(device)
+        find_module.eval()
+
         function_scores = {}
         for i, batch in enumerate(tqdm(unlabeled_data.as_batches(batch_size=full_batch_size, shuffle=False))):
-            unlabeled_tokens, unlabeled_token_lengths, phrases = batch
+            unlabeled_tokens, unlabeled_token_lengths, phrases, _ = batch
             unlabeled_tokens = unlabeled_tokens.to(device)
             phrase_input = build_phrase_input(phrases, pad_idx, task).to(device).detach()
             b_size, seq_length = unlabeled_tokens.shape
@@ -236,16 +230,15 @@ def main():
 
                 for j, pair in enumerate(soft_labeling_functions):
                     func, rel = pair
-                    func_index = labeling_function_indicies[j]
                     batch_scores = func(lfind_output, quoted_words_to_index, mask_mat)(phrase_input).detach() # 1 x B
 
                     type_restrict_multiplier = batch_type_restrict_re(rel, phrase_input, relation_ner_types).detach() # 1 x B
                     final_scores = batch_scores * type_restrict_multiplier # 1 x B
                     final_scores = final_scores.cpu()
-                    if func_index in function_scores:
-                        function_scores[func_index] = torch.cat([function_scores[func_index], final_scores], dim=1)
+                    if j in function_scores:
+                        function_scores[j] = torch.cat([function_scores[j], final_scores], dim=1)
                     else:
-                        function_scores[func_index] = final_scores
+                        function_scores[j] = final_scores
         
         soft_scores = torch.cat([function_scores[key] for key in function_scores]).permute(1, 0) # len(data) x number_of_explanations
 
@@ -256,7 +249,19 @@ def main():
         with open("../data/training_data/soft_scores_{}.p".format(args.experiment_name), "rb") as f:
             soft_scores = pickle.load(f)
 
+    clf = BiLSTM_Att_Clf.BiLSTM_Att_Clf(vocab.vectors, pad_idx, args.emb_dim, args.hidden_dim,
+                                        torch.cuda.is_available(), number_of_classes,
+                                        custom_token_count=custom_vocab_length)
+
     del vocab
+
+    clf = clf.to(device)
+
+    if args.use_adagrad:
+        optimizer = Adagrad(clf.parameters(), lr=args.learning_rate)
+    else:
+        optimizer = SGD(clf.parameters(), lr=args.learning_rate)
+
     
     # define loss functions
     strict_match_loss_function  = nn.CrossEntropyLoss()
@@ -268,10 +273,9 @@ def main():
         total_loss, strict_total_loss, soft_total_loss, sim_total_loss = 0, 0, 0, 0
         batch_count = 0
         clf.train()
-        find_module.eval()
 
-        for step, batch_pair in enumerate(tqdm(zip(strict_match_data.as_batches(batch_size=args.match_batch_size, seed=epoch),\
-                                                   unlabeled_data.as_batches(batch_size=args.unlabeled_batch_size, seed=epoch*args.seed)))):            
+        for step, batch_pair in enumerate(tqdm(zip(strict_match_data.as_batches(batch_size=full_batch_size, seed=epoch),\
+                                                   unlabeled_data.as_batches(batch_size=full_batch_size, seed=epoch*args.seed)))):            
             # prepping batch data
             strict_match_data_batch, unlabeled_data_batch = batch_pair
 
@@ -298,7 +302,7 @@ def main():
             # lsim_pos_scores, lsim_neg_scores = model.sim_forward(lsim_query_tokens, query_index_matrix, neg_query_index_matrix)
 
             strict_match_loss = strict_match_loss_function(strict_match_predictions, strict_match_labels)
-            soft_match_loss = torch.sum(soft_match_loss_function(soft_match_predictions, unlabeled_labels) * unlabeled_label_weights)
+            soft_match_loss = torch.sum(soft_match_loss_function(soft_match_predictions, pseudo_labels) * unlabeled_label_weights)
             # sim_loss = sim_loss_function(lsim_pos_scores, lsim_neg_scores)
             # combined_loss = strict_match_loss + args.gamma * soft_match_loss + args.beta * sim_loss
             combined_loss = strict_match_loss + args.gamma * soft_match_loss
