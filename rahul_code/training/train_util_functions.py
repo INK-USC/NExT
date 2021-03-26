@@ -379,7 +379,7 @@ def build_datasets_from_splits(train_path, dev_path, test_path, vocab_, explanat
 
     soft_matching_functions = parser.soft_labeling_functions
 
-    function_labels = _prepare_labels([entry[1] for entry in soft_matching_functions], label_map)
+    function_labels = torch.tensor(_prepare_labels([entry[1] for entry in soft_matching_functions], label_map))
 
     file_name = "../data/training_data/labeling_functions_{}.p".format(save_string)
     with open(file_name, "wb") as f:

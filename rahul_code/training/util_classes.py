@@ -2,6 +2,7 @@
 import torch
 import random
 from abc import ABC, abstractmethod
+import logging
 
 class BaseVariableLengthDataset(ABC):
     @abstractmethod
@@ -58,7 +59,7 @@ class PreTrainingFindModuleDataset(BaseVariableLengthDataset):
         self.pad_idx = pad_idx
         assert len(self.tokens) == len(self.queries)
         assert len(self.tokens) == len(self.labels)
-        print("Dataset built, count: {}".format(str(len(self.tokens))))
+        logging.info("Dataset built, count: {}".format(str(len(self.tokens))))
     
     def as_batches(self, batch_size, seed=0, shuffle=True):
         """
@@ -78,13 +79,13 @@ class PreTrainingFindModuleDataset(BaseVariableLengthDataset):
         if shuffle:
             temp_data = list(zip(self.tokens, self.queries, self.labels))
             random.Random(seed).shuffle(temp_data)
-            self.tokens, self.queries, self.labels = zip(*temp_data)
-        for i in range(0, len(self.tokens), batch_size): # i incrememt by batch_size
-            batch_tokens = self.tokens[i: i+batch_size] # slice
+            shuffled_tokens, shuffled_queires, shuffled_labels = zip(*temp_data)
+        for i in range(0, len(shuffled_tokens), batch_size): # i incrememt by batch_size
+            batch_tokens = shuffled_tokens[i: i+batch_size] # slice
             batch_tokens, _ = self.variable_length_batch_as_tensors(batch_tokens, self.pad_idx)
-            batch_queries = self.queries[i: i+batch_size]
+            batch_queries = shuffled_queires[i: i+batch_size]
             batch_queries, _ = self.variable_length_batch_as_tensors(batch_queries, self.pad_idx)
-            batch_labels = self.labels[i: i+batch_size]
+            batch_labels = shuffled_labels[i: i+batch_size]
             batch_labels, _ = self.variable_length_batch_as_tensors(batch_labels, 0.0, torch.float)
             yield (batch_tokens, batch_queries, batch_labels)
     
@@ -110,7 +111,7 @@ class TrainingDataset(BaseVariableLengthDataset):
         self.pad_idx = pad_idx
         assert len(self.tokens) == len(self.labels)
         self.length = len(self.tokens)
-        print("Dataset built, count: {}".format(str(self.length)))
+        logging.info("Dataset built, count: {}".format(str(self.length)))
     
     def as_batches(self, batch_size, seed=0, shuffle=True, sample=-1):
         """
@@ -130,20 +131,20 @@ class TrainingDataset(BaseVariableLengthDataset):
         if shuffle:
             temp_data = list(zip(self.tokens, self.labels))
             random.Random(seed).shuffle(temp_data)
-            self.tokens, self.labels = zip(*temp_data)
-        
-        tokens = self.tokens
-        labels = self.labels
+            shuffled_tokens, shuffled_labels = zip(*temp_data)
+        else:
+            shuffled_tokens = self.tokens
+            shuffled_labels = self.labels
 
         if sample > 0:
-            temp_data = list(zip(tokens, labels))
+            temp_data = list(zip(shuffled_tokens, shuffled_labels))
             sampled_data = random.Random(seed).sample(temp_data, sample)
-            tokens, labels = zip(*sampled_data)
+            shuffled_tokens, shuffled_labels = zip(*sampled_data)
         
-        for i in range(0, len(tokens), batch_size): # i incrememt by batch_size
-            batch_tokens = tokens[i: i+batch_size] # slice
+        for i in range(0, len(shuffled_tokens), batch_size): # i incrememt by batch_size
+            batch_tokens = shuffled_tokens[i: i+batch_size] # slice
             batch_tokens, batch_lengths = self.variable_length_batch_as_tensors(batch_tokens, self.pad_idx)
-            batch_labels = torch.tensor(labels[i: i+batch_size])
+            batch_labels = torch.tensor(shuffled_labels[i: i+batch_size])
             yield (batch_tokens, batch_lengths, batch_labels)
 
 class UnlabeledTrainingDataset(BaseVariableLengthDataset):
@@ -166,8 +167,9 @@ class UnlabeledTrainingDataset(BaseVariableLengthDataset):
         self.tokens = tokens
         self.phrases = phrases
         self.pad_idx = pad_idx
+        self.indices = [i for in range(len(self.tokens))]
         assert len(self.tokens) == len(self.phrases)
-        print("Dataset built, count: {}".format(str(len(self.tokens))))
+        logging.info("Dataset built, count: {}".format(str(len(self.tokens))))
     
     def as_batches(self, batch_size, seed=0, shuffle=True):
         """
@@ -181,15 +183,16 @@ class UnlabeledTrainingDataset(BaseVariableLengthDataset):
                 shuffle   (bool) : whether to shuffle data before batching
 
             Returns:
-                batch_tokens, batch_queries, batch_labels : per batch the tokens, queries and labels
-                                                            needed for find pre-training
+                batch_tokens, batch_queries, batch_labels, batch_indices : per batch the tokens, queries and labels
+                                                                           needed for find pre-training
         """
         if shuffle:
-            temp_data = list(zip(self.tokens, self.phrases))
+            temp_data = list(zip(self.indices, self.tokens, self.phrases))
             random.Random(seed).shuffle(temp_data)
-            self.tokens, self.phrases = zip(*temp_data)
-        for i in range(0, len(self.tokens), batch_size): # i incrememt by batch_size
-            batch_tokens = self.tokens[i: i+batch_size] # slice
+            shuffled_indices, shuffled_tokens, shuffled_phrases = zip(*temp_data)
+        for i in range(0, len(shuffled_tokens), batch_size): # i incrememt by batch_size
+            batch_tokens = shuffled_tokens[i: i+batch_size] # slice
             batch_tokens, batch_lengths = self.variable_length_batch_as_tensors(batch_tokens, self.pad_idx)
-            batch_phrases= self.phrases[i: i+batch_size]
-            yield (batch_tokens, batch_lengths, batch_phrases)
+            batch_phrases = shuffled_phrases[i: i+batch_size]
+            batch_indices = shuffled_indices[i: i+batch_size]
+            yield (batch_tokens, batch_lengths, batch_phrases, batch_indices)
