@@ -404,41 +404,6 @@ STRICT_MATCHING_OPS = {
     "@EndsWith"   : lambda x,y: lambda c: c.with_(x[-1],'ends',y),
 }
 
-# SOFT_MATCHING_OPS = {
-#     ".root"      : lambda xs: lambda label_mat,keyword_dict,mask_mat: lambda c: torch.clamp(sum([x(label_mat,keyword_dict,mask_mat)(c) for x in xs])-len(xs)+1, min=0.0) if type(xs) == tuple else xs(label_mat,keyword_dict,mask_mat)(c),
-#     "@Word"      : lambda x: x,
-#     "@Is"        : lambda ws, p: lambda label_mat,keyword_dict,mask_mat: lambda c: soft_gram_f.IsFunc_soft(ws, p,label_mat,keyword_dict,mask_mat, c),
-#     "@between"   : lambda a: lambda w, option=None: lambda label_mat,keyword_dict,mask_mat: lambda c: soft_gram_f.at_between_soft(w, label_mat,keyword_dict,mask_mat,c, option),
-#     "@And"       : lambda x, y: soft_gram_f.merge_soft(x, y),
-#     "@Num"       : lambda x, y: {'attr': y, "num": int(x)},
-#     "@LessThan"  : lambda funcx, nouny: lambda w: lambda label_mat,keyword_dict,mask_mat: lambda c: soft_gram_f.at_lessthan_soft(funcx, nouny, w, label_mat,keyword_dict,mask_mat,c),
-#     "@AtMost"    : lambda funcx, nouny: lambda w: lambda label_mat,keyword_dict,mask_mat: lambda c: soft_gram_f.at_atmost_soft(funcx, nouny, w, label_mat,keyword_dict,mask_mat,c),
-#     "@AtLeast"   : lambda funcx, nouny: lambda w: lambda label_mat,keyword_dict,mask_mat: lambda c: soft_gram_f.at_atleast_soft(funcx, nouny, w, label_mat,keyword_dict,mask_mat,c),
-#     "@MoreThan"  : lambda funcx, nouny: lambda w: lambda label_mat,keyword_dict,mask_mat: lambda c: soft_gram_f.at_morethan_soft(funcx, nouny, w, label_mat,keyword_dict,mask_mat,c),
-#     "@WordCount" : lambda nounNum, nouny, F:lambda useless: lambda label_mat,keyword_dict,mask_mat: lambda c: soft_gram_f.at_WordCount_soft(nounNum,nouny,F,label_mat,keyword_dict,mask_mat,c),
-
-#     "@NumberOf"  : lambda x,f: [x, f],
-#     "@LessThan1" : lambda nounynum: lambda x: lambda label_mat,keyword_dict,mask_mat: lambda c: soft_gram_f.at_lessthan_soft(x[1], {'attr': x[0], "num": int(nounynum)}, 'There',label_mat,keyword_dict,mask_mat,c),
-#     "@AtMost1"   : lambda nounynum: lambda x: lambda label_mat,keyword_dict,mask_mat: lambda c: soft_gram_f.at_atmost_soft(x[1], {'attr': x[0], "num": int(nounynum)}, 'There', label_mat,keyword_dict,mask_mat,c),
-#     "@AtLeast1"  : lambda nounynum: lambda x: lambda label_mat,keyword_dict,mask_mat: lambda c: soft_gram_f.at_atleast_soft(x[1], {'attr': x[0], "num": int(nounynum)}, 'There',label_mat,keyword_dict,mask_mat,c),
-#     "@MoreThan1" : lambda nounynum: lambda x: lambda label_mat,keyword_dict,mask_mat: lambda c: soft_gram_f.at_morethan_soft(x[1], {'attr': x[0], "num": int(nounynum)}, 'There',label_mat,keyword_dict,mask_mat,c),
-
-#     "@In0"       : lambda arg: lambda w: lambda label_mat,keyword_dict,mask_mat: lambda c: soft_gram_f.at_In0_soft(arg, w, label_mat,keyword_dict,mask_mat,c),
-#     "@In1"       : lambda arg,w: lambda label_mat,keyword_dict,mask_mat: lambda c: soft_gram_f.at_In0_soft(arg, w, label_mat,keyword_dict,mask_mat,c),
-#     "@By"        : lambda x,f,z: lambda label_mat,keyword_dict,mask_mat: lambda c: f(x, {'attr': z['attr'], 'range': z['num'], 'numAppear': 1, 'cmp': 'nlt','onlyCount': False})(label_mat,keyword_dict,mask_mat)(c),
-
-#     "@Left0"     : lambda arg: lambda w, option=None: lambda label_mat,keyword_dict,mask_mat: lambda c: soft_gram_f.at_POSI_0_soft('Left', arg, w, label_mat,keyword_dict,mask_mat,c, option),
-
-#     "@Right0"    : lambda arg: lambda w, option=None: lambda label_mat,keyword_dict,mask_mat: lambda c: soft_gram_f.at_POSI_0_soft('Right', arg, w, label_mat,keyword_dict,mask_mat,c, option),
-
-#     "@Range0"    : lambda arg: lambda w, option=None: lambda label_mat,keyword_dict,mask_mat: lambda c: soft_gram_f.at_POSI_0_soft('Range', arg, w, label_mat,keyword_dict,mask_mat,c, option),
-
-#     "@Left"      : lambda arg,ws,option=None: lambda label_mat,keyword_dict,mask_mat: lambda c: soft_gram_f.at_POSI_soft('Left', ws, arg, label_mat,keyword_dict,mask_mat,c, option),
-#     "@Right"     : lambda arg,ws,option=None: lambda label_mat,keyword_dict,mask_mat: lambda c: soft_gram_f.at_POSI_soft('Right', ws, arg, label_mat,keyword_dict,mask_mat,c, option),
-
-#     "@Direct"    : lambda func: lambda w: lambda label_mat,keyword_dict,mask_mat: lambda c: func(w, 'Direct')(label_mat,keyword_dict,mask_mat)(c)
-# }
-
 SOFT_MATCHING_OPS = {
     ".root": lambda xs: lambda label_mat,keyword_dict,mask_mat:lambda c: torch.max(torch.tensor(sum([x(label_mat,keyword_dict,mask_mat)(c) for x in xs])-len(xs)+1).to(device),torch.tensor(0.0).to(device)) if type(xs) == tuple else xs(label_mat,keyword_dict,mask_mat)(c),
     "@Word": lambda x: x,
@@ -459,7 +424,7 @@ SOFT_MATCHING_OPS = {
     "@MoreThan1": lambda nounynum: lambda x: lambda label_mat,keyword_dict,mask_mat:lambda c: soft_gram_f.at_morethan_soft(x[1], {'attr': x[0], "num": int(nounynum)}, 'There',label_mat,keyword_dict,mask_mat,c),
 
     "@In0": lambda arg: lambda w: lambda label_mat,keyword_dict,mask_mat:lambda c: soft_gram_f.at_In0_soft(arg, w, label_mat,keyword_dict,mask_mat,c),
-
+    "@In1": lambda arg,w: lambda label_mat,keyword_dict,mask_mat: lambda c: soft_gram_f.at_In0_soft(arg, w, label_mat,keyword_dict,mask_mat,c),
     "@By": lambda x, f, z: lambda label_mat,keyword_dict,mask_mat:lambda c: f(x, {'attr': z['attr'], 'range': z['num'], 'numAppear': 1, 'cmp': 'nlt','onlyCount': False})(label_mat,keyword_dict,mask_mat)(c),
 
     "@Left0": lambda arg: lambda w, option=None: lambda label_mat,keyword_dict,mask_mat:lambda c: soft_gram_f.at_POSI_0_soft('Left', arg, w, label_mat,keyword_dict,mask_mat,c, option),

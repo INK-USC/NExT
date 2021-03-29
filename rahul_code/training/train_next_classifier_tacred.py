@@ -103,9 +103,6 @@ def main():
                          type=int,
                          default=0,
                          help="start_epoch")
-    parser.add_argument('--use_adagrad',
-                        action='store_true',
-                        help="use adagrad optimizer")
 
     
     args = parser.parse_args()
@@ -208,8 +205,7 @@ def main():
     c0 = torch.empty(n_layer_x_n_directions, full_batch_size, args.hidden_dim).to(device)
     nn.init.xavier_normal_(h0)
     nn.init.xavier_normal_(c0)
-    
-    # Step 4.
+
     if args.build_data:
         find_module = Find_Module.Find_Module(vocab.vectors, pad_idx, args.emb_dim, FIND_MODULE_HIDDEN_DIM,
                                               torch.cuda.is_available(), custom_token_count=custom_vocab_length)
@@ -244,6 +240,8 @@ def main():
 
         with open("../data/training_data/soft_scores_{}.p".format(args.experiment_name), "wb") as f:
             pickle.dump(soft_scores, f)
+        
+        del find_module
     
     else:
         with open("../data/training_data/soft_scores_{}.p".format(args.experiment_name), "rb") as f:
@@ -257,12 +255,8 @@ def main():
 
     clf = clf.to(device)
 
-    if args.use_adagrad:
-        optimizer = Adagrad(clf.parameters(), lr=args.learning_rate)
-    else:
-        optimizer = SGD(clf.parameters(), lr=args.learning_rate)
+    optimizer = SGD(clf.parameters(), lr=args.learning_rate)
 
-    
     # define loss functions
     strict_match_loss_function  = nn.CrossEntropyLoss()
     soft_match_loss_function = nn.CrossEntropyLoss(reduction='none')
@@ -299,17 +293,13 @@ def main():
             
             strict_match_predictions = clf.forward(strict_match_tokens, strict_match_lengths, h0, c0)
             soft_match_predictions = clf.forward(unlabeled_tokens, unlabeled_token_lengths, h0, c0)
-            # lsim_pos_scores, lsim_neg_scores = model.sim_forward(lsim_query_tokens, query_index_matrix, neg_query_index_matrix)
 
             strict_match_loss = strict_match_loss_function(strict_match_predictions, strict_match_labels)
             soft_match_loss = torch.sum(soft_match_loss_function(soft_match_predictions, pseudo_labels) * unlabeled_label_weights)
-            # sim_loss = sim_loss_function(lsim_pos_scores, lsim_neg_scores)
-            # combined_loss = strict_match_loss + args.gamma * soft_match_loss + args.beta * sim_loss
             combined_loss = strict_match_loss + args.gamma * soft_match_loss
 
             strict_total_loss = strict_total_loss + strict_match_loss.item()
             soft_total_loss = soft_total_loss + soft_match_loss.item()
-            # sim_total_loss = sim_total_loss + sim_loss.item()
             total_loss = total_loss + combined_loss.item()
             batch_count += 1
 
